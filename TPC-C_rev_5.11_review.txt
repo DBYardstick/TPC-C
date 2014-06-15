@@ -1,0 +1,95 @@
+
+This document is to record important facts about the benchmark, and to discuss
+variations and options allowed by the TPC-C benchmark specification.
+
+Section 0.3:
+
+.) TYPO: repeats the phrase 'is an accepted'.
+
+This section allows new methodologies and approaches for the implementation so
+long as the rules are adhered to. So I guess trying TPC-C implementation in
+JavaScript, for the advantages I am seeking, can be considered a new methodology.
+
+Section 1.1 (Logical Design):
+
+A company has various warehouses. Each warehouse holds stock of 100,000 items
+sold by the company. Each warehouse serves 10 districts, and each district
+serves 3000 customers.
+
+Customers call to place orders or check the status of the orders. Each order, on
+average consists of 10 items (a.k.a line items). One percent of all line items
+are for an item that is out of stock at the local warehous, and has to be
+supplied by a remote warehouse.
+
+The system is also used to accepts customers' payments, check stock level, and
+process orders for delivery.
+
+Section 1.3 (DB layout):
+
+.) "N unique IDs" mean that column/attribute should be capable of holding a
+minimum of N unique identifiers, using whatever data type suited for the
+purpose; eg. strings, binary data, packed decimal, etc.
+
+.) "variable text, size N" means the column/sttribute should be able to hold a
+string of **maximum** length N.
+
+If fixed-length data type is used here instead, then if the string being stored
+is smaller than N, then the string should be stored with padding.
+
+DISCUSSION: I think this clause mentioning fixed data type is to allow for DBMS'
+that don't have variable-length string data types. I think it can be safely
+ignored, as Postgres has text and varchar data types. But if fixed-length data
+types (say, char) provides improved performance, then the benchmark allows it.
+
+.) "fixed text, size N" means the column should be capable of holding character
+strings of length exacly N.
+
+.) "date and time" means a data type that holds date and time. The data type
+should be capable of holding values between '1st January 1900' and
+'31st December 2100'.
+
+The time component must be capable of representing the range of time values from
+00:00:00 to 23:59:59 with a resolution of at least one second.
+
+Date and Time must be implemented using data types that are defined by the DBMS
+for that use.
+
+.) "numeric(m [,n])" means an **unsigned** numeric with at least m total digits
+and n of those are to the right of the decimal point. The columns/attributes
+that are used to store monetary values (W_YTD, I_PRICE, etc.) must use the data
+type that is defined as an **exact numeric data type**, or should satisfy ANSI
+SQL definition of being an exact numeric representation.
+
+DISCUSSION: I think the primary purpose of this data type is to hold monitary
+values, and the database specific implementations are allowed (e.g. money data
+type in Postgres).
+
+TODO: Investigate what an **exact numeric data type** means and if Postgres has
+any data type that satisfies the definition, and is also faster than the
+'numeric' data type as implemented in Postgres.
+
+.) "signed numeric(m,n)" implies same definitions as 'numeric(m,n)' above,
+except that this data type can also store negative values.
+
+.) TPC-C spec allows for 'signed numeric' can be used anywhere the 'numeric'
+data type is defined.
+
+Consider this comment: "For each table, the following list of attributes can be
+implemented in any order, using any physical representation available from the
+tested system". It specifically allows for reordering of columns in the table.
+So, the TODO item for when the benchmark is implemented successfully, is to
+measure the difference between the spec-provided layout and the often cited myth
+that the fixed-length data types should be grouped towards the beginning of the
+column list.
+
+
+
+
+
+
+
+
+
+
+
+
