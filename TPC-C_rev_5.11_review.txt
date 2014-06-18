@@ -1,8 +1,16 @@
 
-This document is to record important facts about the benchmark, and to discuss
+
+.) This document is to record important facts about the benchmark, and to discuss
 variations and options allowed by the TPC-C benchmark specification.
 
-Section 0.3:
+.) Terms used:
+
+SUT: System Under Run.
+
+TPC-C Aplication: The application that performs transactions in conformance with
+					the TPC-C Spec; eg. our application.
+
+.) Section 0.3:
 
 .) TYPO: repeats the phrase 'is an accepted'.
 
@@ -82,10 +90,58 @@ measure the difference between the spec-provided layout and the often cited myth
 that the fixed-length data types should be grouped towards the beginning of the
 column list.
 
+"Note: The TPC-C application does not have to be capable of utilizing the increased range of C_ID
+values beyond 6,000."
+
+.) Does the clause 1.4.2 prohibit us from implementing one TPC-C transaction as a
+single CTE query comprising of multiple operations? If yes, then some of the other
+TPC-C applications (term used in spec.) seem to be violating this by implementing
+the transaction in plpgsql functions.
+
+Clause 2.1.7 mentions the stored procedures, triggers and foreign keys to be
+a part of the application program/TPC-C application. Which seems to imply that
+it is acceptable for the transaction profiles to be written purely in stored
+procedures/functions.
 
 
+.) I think clause 1.4.6 precludes "asynchronous" streaming replication, but allows for
+"synchronous" streaming replication.
+
+Correction: The comment immediately after 1.4.6 seems to imply that "async"
+replication is fine, too. We'll see when we cover section 3 about ACID compliance.
 
 
+.) Partitioning
+
+Clauses 1.4.4 and 1.5.1 combined imply that hoirizontal partitioning is allowed
+as long as the operation across the partitions is done in a transaction.
+
+
+.) NURand: non-uniform random, used **only for generating** customer numbers, customer last names,
+and item numbers,
+
+
+NURand (A, x, y) = (((random (0, A) | random (x, y)) + C) % (y - x + 1)) + x
+
+for C_LAST, the range is [0 .. 999] and A = 255
+for C_ID, the range is [1 .. 3000] and A = 1023
+for OL_I_ID, the range is [1 .. 100000] and A = 8191
+
+
+.) Clause 2.1.8 requires the terminal to be at least 24 x 80 characters in size,
+and that it should be a dumb terminal, meaning it doesn't have any knowledge of
+the application, except how to display the application's interface.
+
+Clause 2.2.1.2 allows for reordering/repositioning of the fields, not that I think
+we will need to do that.
+
+If a screen layout (other than the ones listed in clauses 2.4.3.1, 2.5.3.1,
+2.6.3.1, 2.7.3.1, and 2.8.3.1) is used, it must be included in the
+'Full Disclosure Report'.
+
+
+2.2.1.4 Allows for the application to not display fields that are unused for a
+screen, like empty fields for Order-line-items in New Order screen.
 
 
 
