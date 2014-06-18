@@ -17,6 +17,10 @@ You should have received a copy of the GNU General Public License version 3
 along with TPC.js.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/* TypeScript headers */
+/// <reference path="typings/node/node.d.ts" />
+
+
 var GPLv3Message =
 "TPC.js  Copyright (C) 2014  Gurjeet Singh, http://gurjeet.singh.im"
 + "\n" + "This program comes with ABSOLUTELY NO WARRANTY. This is free software, and you"
@@ -25,16 +29,25 @@ var GPLv3Message =
 var blessed = require('blessed');
 
 /* Create a screen */
-var screen = blessed.screen();
+/*
+ * XXX: For some inexplicable reason, if this variable is named 'screen', it
+ * `tsc` to emit an error, and nothing resolves the error.
+ *
+ * TODO: Create a definition file for blessed and contribute it to
+ * DefinitelyTyped repo.
+ */
+var mainScreen: any = blessed.screen();
 
-/* Create a box in top-left corner, sized just enough to hold a TPC-C terminal's contents */
-var topBox = blessed.box({
-  parent: screen, /* This box is the only child of the screen */
+/*
+ * Create a box in top-left corner of the screen, sized just enough to hold a
+ * TPC-C terminal's contents.
+ */
+var mainBox = blessed.box({
+  parent: mainScreen, /* This box is the only child of the screen */
   top: 'top',
   left: 'left',
   width: '500',
   height: '500',
-  content: '{center}{bold}TPC-C{/bold}{/center}',
   tags: true,
   border: {
     type: 'line'
@@ -45,15 +58,33 @@ var topBox = blessed.box({
     border: {
       fg: '#f0f0f0',
     },
-    hover: {
-      bg: 'green'
-    }
   }
 });
 
-/* Create a box to display license and warranty message at the bottom of the top box. */
+var headerBox = blessed.box({
+  parent: mainBox,
+  left: 'center',
+  top: 'top',
+  width: '100%',
+  height: '120',
+  content: '{center}TPC-C{/center}',
+  tags: true,
+  border: {
+    type: 'line'
+  },
+  style: {
+    fg: 'white',
+    bg: 'black',
+    border: {
+      fg: '#f0f0f0',
+      bg: 'black',
+    },
+  }
+});
+
+/* Create a box to display license and warranty message at the bottom of the main box. */
 var licenseBox = blessed.box({
-  parent: topBox,
+  parent: mainBox,
   left: 'center',
   bottom: 0,
   width: '100%',
@@ -70,22 +101,28 @@ var licenseBox = blessed.box({
       fg: '#f0f0f0',
       bg: 'black',
     },
-    hover: {
-      bg: 'green'
-    }
   }
 });
 
 /* Remove the license/warranty message after a while */
 var licenseBoxTimeoutHandle = setTimeout(function() {
+
   licenseBox.parent.remove(licenseBox);
-  screen.render();
+
+  mainScreen.render();
+
+  delete licenseBox;  /* Recover the redundant object, and all the event
+                       * handlers associated with it.
+                       */
+
 }, 3000);
 
 /* Remove the license/warranty message if someone clicks on it. */
 licenseBox.on('click', function() {
 
   licenseBox.parent.remove(licenseBox);
+
+  mainScreen.render();
 
   /*
    * Prevent the timeout function from being called, because we've already done
@@ -98,24 +135,11 @@ licenseBox.on('click', function() {
                        */
 });
 
-topBox.on('click', function(data) {
-  topBox.setContent('{center}Some different {red-fg}content{/red-fg}.{/center}');
-  screen.render();
-});
-
-topBox.key('enter', function(ch, key) {
-  topBox.setContent('{right}Even different {black-fg}content{/black-fg}.{/right}\n');
-  topBox.setLine(1, 'bar');
-  topBox.insertLine(1, 'foo');
-  screen.render();
-});
-
 /* End the program on these keys */
-screen.key(['escape', 'q', 'C-c'], function(ch, key) {
+mainScreen.key(['escape', 'q', 'C-c'], function(ch, key) {
   return process.exit(0);
 });
 
-topBox.focus();
+mainBox.focus();
 
-screen.render();
-
+mainScreen.render();
