@@ -10,6 +10,10 @@ SUT: System Under Run.
 TPC-C Aplication: The application that performs transactions in conformance with
 					the TPC-C Spec; eg. our application.
 
+RT: Response Time
+
+TM: Transaction Monitor, or Transaction Processing Monitor
+
 .) Section 0.3:
 
 .) TYPO: repeats the phrase 'is an accepted'.
@@ -139,13 +143,62 @@ If a screen layout (other than the ones listed in clauses 2.4.3.1, 2.5.3.1,
 2.6.3.1, 2.7.3.1, and 2.8.3.1) is used, it must be included in the
 'Full Disclosure Report'.
 
-
 2.2.1.4 Allows for the application to not display fields that are unused for a
 screen, like empty fields for Order-line-items in New Order screen.
 
+2.2.1.5 requires that all editable fields on the screen be cleared before each
+transaction, even if same transaction is being used as the previous one.
 
+2.2.1.6/7 make it clear that a menu be used which allows the user to choose the
+transaction to be performed next. The menu should contain the name of the
+transactions, and action to be taken by the user to choose a transaction.
 
+2.2.1.8 There shouldn't be any display components/fields other than required by
+the specification. If there are any, they should be disclosed with an explanation.
 
+{{{
 
+IMPORTANT: RE-REVIEW with someone/auditor:
+2.2.2.4.1 requires that the characters are echoed back as they are entered by the
+operator in the fields. The comment afterwards allows that if the terminal is
+implemeted in a browser, on a PC etc. then this echo-test is not required.
+
+Since this whole 2.2.2 section mandates a RTE that the terminal be a fully
+functional one, where someone can actually switch back and forth between fields,
+enter text one character at a time, etc., I am not going to implement it until
+the end (after the database interaction layer is finished). I currenlty don't
+feel confident enough with 'blessed' library to implement a complete functional
+terminal.
+
+}}}
+
+## TP Monitor (Transaction [Processing] Monitor)
+
+Clause 2.3.5 applies if some kind of connection pooler or transaction manager is
+used inside SUT. Since I, at least initially, intend to use a connection pooler
+inside the NodeJS application (most likely the connection pool offered by
+node-postgres), I don't think I need to worry about this component.
+
+Even if an external software, like pgbouncer, is used as a TP Monitor the TPC-C
+application doesn't need to be modified for it
+
+For an actual TPC-C run, the auditor might insist on not using the
+in-application connection pooler, becauase in a real-world setup, the terminals
+spread around geographically cannot be made to use such a technology.
+
+Initially, since Postgres is considered capable of handling between 300-400
+connections under OLTP workloads, it may not even be necessary to use a
+TPMonitor, and make the connections directly to the database. This is explicitly
+allowed by 'Comment 3' under clause 2.3.5.
+
+Clause 2.3.6 requires that for interactive transactions, in case of an error,
+some kind of error message be reported the terminal. And in case of
+non-interactive transactions, the error be logged in log files.
+
+## New Order Transaction Profile
+
+.) Warehouse associated with a terminal is fixed.
+
+.) All New Order transactions should use freshly generated data before each run.
 
 
