@@ -275,27 +275,32 @@ begin
 end;
 $$ language plpgsql;
 
-create or replace function add_warehouses(num_warehouses integer default 1) returns void as $$
-declare
-	current_w_count integer = (select count(*) from WAREHOUSE);
+create or replace function add_warehouses(num_warehouses integer default 1) returns setof integer as $$
 begin
-	for w_id in current_w_count+1 .. current_w_count+num_warehouses loop
+	return query
+	with
+	current_wh_count(n) as (
+		select count(*) as n
+		from WAREHOUSE),
 
-		insert into WAREHOUSE (W_ID, W_NAME, W_STREET_1, W_STREET_2, W_CITY,
-								W_STATE, W_ZIP, W_TAX, W_YTD)
-			values	(w_id,
-					random_a_string(6, 10),
-					random_a_string(10, 20),
-					random_a_string(10, 20),
-					random_a_string(10, 20),
-					random_a_string(2, 2),
-					random_n_string(4, 4) || '11111',
-					random() * 0.2,
-					300000);
+	warehouses_inserted(w_id) as (
+		insert into WAREHOUSE
+			select	s									as W_ID,
+					random_a_string(6, 10)				as W_NAME,
+					random_a_string(10, 20)				as W_STREET_1,
+					random_a_string(10, 20)				as W_STREET_2,
+					random_a_string(10, 20)				as W_CITY,
+					random_a_string(2, 2)				as W_STATE,
+					random_n_string(4, 4) || '11111'	as W_ZIP,
+					random() * 0.2						as W_TAX,
+					300000								as W_YTD
+			from generate_series((select n from current_wh_count)+1, (select n from current_wh_count)+num_warehouses) as s
+			returning W_ID),
 
+	stocks_inserted as (
 		insert into STOCK
 			select	s											as S_ID,
-					w_id										as W_ID,
+					w.w_id										as W_ID,
 					10 + floor(random() * (100 - 10))::integer	as S_QUANTITY,
 					random_a_string(24, 24)						as S_DIST_01,
 					random_a_string(24, 24)						as S_DIST_02,
@@ -317,22 +322,28 @@ begin
 					else
 						random_a_string(26, 50)
 					end										as S_DATA
-			from generate_series(1, 100000) as s;
+			from generate_series(1, 100000) as s
+				cross join warehouses_inserted as w),
 
-		insert into	DISTRICT
-			select	s									as D_ID,
-					w_id								as D_W_ID,
-					random_a_string(6, 10)				as D_NAME,
-					random_a_string(10, 20)				as D_STREET_1,
-					random_a_string(10, 20)				as D_STREET_2,
-					random_a_string(10, 20)				as D_CITY,
-					random_a_string(2, 2)				as D_STATE,
-					random_n_string(4, 4) || '11111'	as D_ZIP,
-					random() * 0.2						as D_TAX,
-					30000								as D_YTD,
-					3001								as D_NEXT_OID
-			from generate_series(1, 10) as s;
-	end loop;
+		districts_inserted (d_id, d_w_id)  as (
+			insert into	DISTRICT
+				select	s									as D_ID,
+						w.w_id								as D_W_ID,
+						random_a_string(6, 10)				as D_NAME,
+						random_a_string(10, 20)				as D_STREET_1,
+						random_a_string(10, 20)				as D_STREET_2,
+						random_a_string(10, 20)				as D_CITY,
+						random_a_string(2, 2)				as D_STATE,
+						random_n_string(4, 4) || '11111'	as D_ZIP,
+						random() * 0.2						as D_TAX,
+						30000								as D_YTD,
+						3001								as D_NEXT_OID
+				from generate_series(1, 10) as s
+					cross join warehouses_inserted as w
+				returning d_id, d_w_id)
+	select w_id from warehouses_inserted;
+
+	return;
 end;
 $$ language plpgsql;
 
