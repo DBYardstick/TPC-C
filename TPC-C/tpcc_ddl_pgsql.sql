@@ -203,15 +203,23 @@ create table ORDER_LINE (
 
 /*
  * Random string generators, as described in Clause 4.3.2.2.
+ *
+ * Note that error checking of input parameters is intentionally left out, since
+ * these are not general-purpose functions used by the application.
+ *
+ * TODO: Implement these functions as SQL-language functions, and see if get
+ *			better performance. One side-effect I am wary of is that the SQL
+ *			language functions might get inlined (a good thing) but it may also
+ *			lead to them being optimized away (called only once per query),
+ *			which is not what we want.
  */
 create or replace function random_a_string(x integer, y integer) returns text as $$
 declare
 	/* The length of the string should be between x and y characters long. */
-	len			integer = x + floor(random() * ((y + 1) - x))::integer;
-	characters	text = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-	chars_len	integer= length(characters);
-	result		text = '';
-	debug		boolean;
+	len			integer	= x + floor(random() * ((y + 1) - x))::integer;
+	characters	text	= '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	chars_len	integer	= length(characters);
+	result		text	= '';
 begin
 	for i in 1..len loop
 		result = result || substr(characters, 1 + floor(random() * chars_len)::integer, 1);
@@ -223,11 +231,10 @@ $$ language plpgsql;
 create or replace function random_n_string(x integer, y integer) returns text as $$
 declare
 	/* The length of the string should be between x and y characters long. */
-	len			integer = x + floor(random() * ((y + 1) - x))::integer;
-	characters	text = '0123456789';
-	chars_len	integer= length(characters);
-	result		text = '';
-	debug		boolean;
+	len			integer	= x + floor(random() * ((y + 1) - x))::integer;
+	characters	text	= '0123456789';
+	chars_len	integer	= length(characters);
+	result		text	= '';
 begin
 	for i in 1..len loop
 		result = result || substr(characters, 1 + floor(random() * chars_len)::integer, 1);
@@ -287,22 +294,22 @@ begin
 					300000);
 
 		insert into STOCK
-			select	s					as S_ID,
-					w_id				as W_ID,
-					10 + floor(random() * (100 - 10))::integer as S_QUANTITY,
-					random_a_string(24, 24)	as S_DIST_01,
-					random_a_string(24, 24)	as S_DIST_02,
-					random_a_string(24, 24)	as S_DIST_03,
-					random_a_string(24, 24)	as S_DIST_04,
-					random_a_string(24, 24)	as S_DIST_05,
-					random_a_string(24, 24)	as S_DIST_06,
-					random_a_string(24, 24)	as S_DIST_07,
-					random_a_string(24, 24)	as S_DIST_08,
-					random_a_string(24, 24)	as S_DIST_09,
-					random_a_string(24, 24)	as S_DIST_10,
-					0						as S_YTD,
-					0						as S_ORDER_CNT,
-					0						as S_REMOTE_CNT,
+			select	s											as S_ID,
+					w_id										as W_ID,
+					10 + floor(random() * (100 - 10))::integer	as S_QUANTITY,
+					random_a_string(24, 24)						as S_DIST_01,
+					random_a_string(24, 24)						as S_DIST_02,
+					random_a_string(24, 24)						as S_DIST_03,
+					random_a_string(24, 24)						as S_DIST_04,
+					random_a_string(24, 24)						as S_DIST_05,
+					random_a_string(24, 24)						as S_DIST_06,
+					random_a_string(24, 24)						as S_DIST_07,
+					random_a_string(24, 24)						as S_DIST_08,
+					random_a_string(24, 24)						as S_DIST_09,
+					random_a_string(24, 24)						as S_DIST_10,
+					0											as S_YTD,
+					0											as S_ORDER_CNT,
+					0											as S_REMOTE_CNT,
 					case
 					when random() < 0.10 then
 						(select overlay(str placing 'ORIGINAL' from 1 + floor(random() * (length(str)-8))::integer for 8)
@@ -313,17 +320,17 @@ begin
 			from generate_series(1, 100000) as s;
 
 		insert into	DISTRICT
-			select	s			as D_ID,
-					w_id		as D_W_ID,
-					random_a_string(6, 10) as D_NAME,
-					random_a_string(10, 20) as D_STREET_1,
-					random_a_string(10, 20) as D_STREET_2,
-					random_a_string(10, 20) as D_CITY,
-					random_a_string(2, 2) as D_STATE,
+			select	s									as D_ID,
+					w_id								as D_W_ID,
+					random_a_string(6, 10)				as D_NAME,
+					random_a_string(10, 20)				as D_STREET_1,
+					random_a_string(10, 20)				as D_STREET_2,
+					random_a_string(10, 20)				as D_CITY,
+					random_a_string(2, 2)				as D_STATE,
 					random_n_string(4, 4) || '11111'	as D_ZIP,
-					random() * 0.2	as D_TAX,
-					30000	as D_YTD,
-					3001	as D_NEXT_OID
+					random() * 0.2						as D_TAX,
+					30000								as D_YTD,
+					3001								as D_NEXT_OID
 			from generate_series(1, 10) as s;
 	end loop;
 end;
