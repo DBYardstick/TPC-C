@@ -9,7 +9,7 @@
  * discussion about "N unique IDs".
  *
  * Some columns with NUMERIC data type do not require a scale (digits after the
- * decimal period). These can be converted to plain integers, perhaps with a 
+ * decimal period). These can be converted to plain integers, perhaps with a
  * CHECK constraint to ensure integrity, if performance benefits. All that the
  * specification requires is that these columns be capable of storing at least
  * the specified number of digits.
@@ -17,6 +17,12 @@
  * TODO: Have a second set of eyes review the DDL in context of Clause 1.3.
  * Specifically, we want to make sure that I did not miss any columns in the
  * table definitions.
+ *
+ * Note that the specifiaction allows for rearranging of the columns within a
+ * table. So we can put the fixed-length fields towards the begining of the
+ * table. There's no clear consensus of whether this optimization yeilds any
+ * real performance benefit in Postgres, but we can try and compare the
+ * optimization's performance later.
  */
 
 begin transaction;
@@ -103,14 +109,14 @@ create table HISTORY (
  * other 'Full Disclosure Reports' as well.
  */
 create table ORDERS (
-	O_ID	integer,
-	O_D_ID	integer,
-	O_W_ID	integer,
-	O_C_ID	integer,
-	O_ENTRY_D	timestamp with time zone,
+	O_ID			integer,
+	O_D_ID			integer,
+	O_W_ID			integer,
+	O_C_ID			integer,
+	O_ENTRY_D		timestamp with time zone,
 	O_CARRIER_ID	integer NULL,
-	O_OL_CNT	numeric(2),
-	O_ALL_LOCAL	numeric(1),
+	O_OL_CNT		numeric(2),
+	O_ALL_LOCAL		numeric(1),
 
 	primary key (O_W_ID, O_D_ID,O_ID),
 	foreign key (O_W_ID, O_D_ID, O_C_ID) references CUSTOMER(C_W_ID, C_D_ID, C_ID)

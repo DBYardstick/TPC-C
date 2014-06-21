@@ -94,8 +94,8 @@ measure the difference between the spec-provided layout and the often cited myth
 that the fixed-length data types should be grouped towards the beginning of the
 column list.
 
-"Note: The TPC-C application does not have to be capable of utilizing the increased range of C_ID
-values beyond 6,000."
+"Note: The TPC-C application does not have to be capable of utilizing the
+increased range of C_ID values beyond 6,000."
 
 .) Does the clause 1.4.2 prohibit us from implementing one TPC-C transaction as a
 single CTE query comprising of multiple operations? If yes, then some of the other
