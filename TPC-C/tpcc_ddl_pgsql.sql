@@ -22,7 +22,9 @@
  * table. So we can put the fixed-length fields towards the begining of the
  * table. There's no clear consensus of whether this optimization yeilds any
  * real performance benefit in Postgres, but we can try and compare the
- * optimization's performance later.
+ * optimization's performance later. If this optimization is ever tried, then
+ * make sure that the order of the columns in INSERT statments is also altered
+ * accordingly.
  */
 
 begin transaction;
@@ -193,5 +195,138 @@ create table ORDER_LINE (
 	foreign key (OL_W_ID, OL_D_ID, OL_O_ID) references ORDERS(O_W_ID, O_D_ID, O_ID),
 	foreign key (OL_SUPPLY_W_ID, OL_I_ID) references STOCK(S_W_ID, S_I_ID)
 );
+
+
+/*
+ * Functions for initial data population of TPC-C database.
+ */
+
+/*
+ * Random string generators, as described in Clause 4.3.2.2.
+ */
+create or replace function random_a_string(x integer, y integer) returns text as $$
+declare
+	/* The length of the string should be between x and y characters long. */
+	len			integer = x + floor(random() * ((y + 1) - x))::integer;
+	characters	text = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	chars_len	integer= length(characters);
+	result		text = '';
+	debug		boolean;
+begin
+	for i in 1..len loop
+		result = result || substr(characters, 1 + floor(random() * chars_len)::integer, 1);
+	end loop;
+	return result;
+end;
+$$ language plpgsql;
+
+create or replace function random_n_string(x integer, y integer) returns text as $$
+declare
+	/* The length of the string should be between x and y characters long. */
+	len			integer = x + floor(random() * ((y + 1) - x))::integer;
+	characters	text = '0123456789';
+	chars_len	integer= length(characters);
+	result		text = '';
+	debug		boolean;
+begin
+	for i in 1..len loop
+		result = result || substr(characters, 1 + floor(random() * chars_len)::integer, 1);
+	end loop;
+	return result;
+end;
+$$ language plpgsql;
+
+/* Load ITEM table.
+ *
+ * This is pretty much just one INSERT statement, so a procedure isn't even
+ * necessary.
+ */
+create or replace function load_item() returns void as $$
+declare
+begin
+	/*
+	 * I had to inject the 's as dummy' inside the inline view to force the
+	 * planner to re-execute that view for each outer row. Otherwise, the inline
+	 * view was optimized away, and only one random_a_string() invocation was
+	 * used to populate all of the 'ORIGINAL' rows.
+	 */
+	insert into ITEM
+		select	s										as I_ID,
+				floor(random() * 10000)::integer + 1	as I_IM_ID,
+				random_a_string(14, 24)					as I_NAME,
+				1 + (random() * 100)					as I_PRICE,
+				case
+				when random() < 0.10 then
+					(select overlay(str placing 'ORIGINAL' from 1 + floor(random() * (length(str)-8))::integer for 8)
+						from (select random_a_string(26, 50) as str, s as dummy) as v1 )
+				else
+					random_a_string(26, 50)
+				end										as I_DATA
+		from generate_series(1, 100000) as s;
+
+	return;
+end;
+$$ language plpgsql;
+
+create or replace function add_warehouses(num_warehouses integer default 1) returns void as $$
+declare
+	current_w_count integer = (select count(*) from WAREHOUSE);
+begin
+	for w_id in current_w_count+1 .. current_w_count+num_warehouses loop
+
+		insert into WAREHOUSE (W_ID, W_NAME, W_STREET_1, W_STREET_2, W_CITY,
+								W_STATE, W_ZIP, W_TAX, W_YTD)
+			values	(w_id,
+					random_a_string(6, 10),
+					random_a_string(10, 20),
+					random_a_string(10, 20),
+					random_a_string(10, 20),
+					random_a_string(2, 2),
+					random_n_string(4, 4) || '11111',
+					random() * 0.2,
+					300000);
+
+		insert into STOCK
+			select	s					as S_ID,
+					w_id				as W_ID,
+					10 + floor(random() * (100 - 10))::integer as S_QUANTITY,
+					random_a_string(24, 24)	as S_DIST_01,
+					random_a_string(24, 24)	as S_DIST_02,
+					random_a_string(24, 24)	as S_DIST_03,
+					random_a_string(24, 24)	as S_DIST_04,
+					random_a_string(24, 24)	as S_DIST_05,
+					random_a_string(24, 24)	as S_DIST_06,
+					random_a_string(24, 24)	as S_DIST_07,
+					random_a_string(24, 24)	as S_DIST_08,
+					random_a_string(24, 24)	as S_DIST_09,
+					random_a_string(24, 24)	as S_DIST_10,
+					0						as S_YTD,
+					0						as S_ORDER_CNT,
+					0						as S_REMOTE_CNT,
+					case
+					when random() < 0.10 then
+						(select overlay(str placing 'ORIGINAL' from 1 + floor(random() * (length(str)-8))::integer for 8)
+							from (select random_a_string(26, 50) as str, s as dummy) as v1 )
+					else
+						random_a_string(26, 50)
+					end										as S_DATA
+			from generate_series(1, 100000) as s;
+
+		insert into	DISTRICT
+			select	s			as D_ID,
+					w_id		as D_W_ID,
+					random_a_string(6, 10) as D_NAME,
+					random_a_string(10, 20) as D_STREET_1,
+					random_a_string(10, 20) as D_STREET_2,
+					random_a_string(10, 20) as D_CITY,
+					random_a_string(2, 2) as D_STATE,
+					random_n_string(4, 4) || '11111'	as D_ZIP,
+					random() * 0.2	as D_TAX,
+					30000	as D_YTD,
+					3001	as D_NEXT_OID
+			from generate_series(1, 10) as s;
+	end loop;
+end;
+$$ language plpgsql;
 
 commit transaction;
