@@ -458,14 +458,21 @@ begin
 	 * bug may not appear again for a long time.
 	 */
 	declare
-		min_len	integer	= (random() * 30)::integer;
-		max_len	integer	= (random() * 65)::integer;
+		min_len	integer	= floor(random() * 30 + 1)::integer;
+		max_len	integer	= 30 + floor(random() * 65 + 1)::integer;
 		s		text	= random_a_string(min_len, max_len);
+		n		text	= random_n_string(min_len, max_len);
 	begin
 		if (true <> (select length(s) >= min_len AND length(s) <= max_len)) then
 			return next 'ALERT! random_a_string sanity test failed.'
 						|| ' min_len: ' || min_len || ' max_len: ' || max_len
 						|| ' string: ' || s;
+		end if;
+
+		if (true <> (select length(n) >= min_len AND length(n) <= max_len)) then
+			return next 'ALERT! random_n_string sanity test failed.'
+						|| ' min_len: ' || min_len || ' max_len: ' || max_len
+						|| ' string: ' || n;
 		end if;
 	end;
 
