@@ -274,7 +274,8 @@ $$ language plpgsql;
  * Load ITEM table.
  *
  * This is pretty much just one INSERT statement, so a procedure isn't even
- * necessary.
+ * necessary; this INSERT can be integrated into add_warehouses() function, if
+ * needed.
  */
 create or replace function load_item() returns void as $$
 declare
@@ -324,7 +325,8 @@ begin
 					random_n_string(4, 4) || '11111'	as W_ZIP,
 					random() * 0.2						as W_TAX,
 					300000								as W_YTD
-			from generate_series((select n from current_wh_count)+1, (select n from current_wh_count)+num_warehouses) as s
+			from generate_series((select n from current_wh_count)+1,
+									(select n from current_wh_count)+num_warehouses) as s
 			returning W_ID),
 
 	stocks_inserted as (
@@ -403,6 +405,27 @@ begin
 						1									as C_PAYMENT_CNT,
 						0									as C_DELIVERY_CNT,
 						random_a_string(300, 500)			as C_DATA
+				from generate_series(1, 3000) as s
+					cross join districts_inserted as d),
+
+		/*
+		 * Ideally, the HISTORY table should be generated using the rows
+		 * returned by 'customers_inserted' CTE, but we load it using
+		 * 'districts_inserted' instead, because (a) the data returned be
+		 * 'customers_inserted' won't have to be cached by execution engine, and
+		 * (b) the TPC-C specification doesn't disallow it; all it requires is
+		 * that there be a row in HISTORY table for each row in CUSTOMER table.
+		 */
+		history_inserted as (
+			insert into HISTORY
+				select	s						as H_C_ID,
+						d.d_id					as H_C_D_ID,
+						d.d_w_id				as H_C_W_ID,
+						d.d_id					as H_D_ID,
+						d.d_w_id				as H_W_ID,
+						clock_timestamp()		as H_DATE,
+						10						as H_AMOUNT,
+						random_a_string(12, 24)	as H_DATA
 				from generate_series(1, 3000) as s
 					cross join districts_inserted as d)
 	select w_id from warehouses_inserted;
