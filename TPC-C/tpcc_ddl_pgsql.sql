@@ -434,4 +434,44 @@ begin
 end;
 $$ language plpgsql;
 
+/*
+ * Function to perform sanity checks on the initial data loaded. The purpose of
+ * this function is to ensure that the initial data loaded does not violate the
+ * requirements of the TPC-C specification.
+ */
+create or replace function data_load_sanity_tests() returns setof text as $$
+begin
+	/* Ensure that the ORIGINAL string's placement in I_DATA has sufficient variation. */
+	if ((select count(*) from(select distinct position('ORIGINAL' in I_DATA) from ITEM) as v) < 40 ) then
+		return next 'ITEM table has less than 40 distinct placements of ORIGINAL string in I_DATA.';
+	end if;
+
+	/* Ensure that the ORIGINAL string's placement in I_DATA has sufficient variation. */
+	if ((select count(*) from(select distinct position('ORIGINAL' in S_DATA) from STOCK) as v) < 40 ) then
+		return next 'STOCK table has less than 40 distinct placements of ORIGINAL string in S_DATA.';
+	end if;
+
+	/*
+	 * Test that random_a_string() returns a string withing the bounds. If this
+	 * test fails even once, the incident should be taken seriosky to review the
+	 * random_a_function(). Because of the random nature of the function, the
+	 * bug may not appear again for a long time.
+	 */
+	declare
+		min_len	integer	= (random() * 30)::integer;
+		max_len	integer	= (random() * 65)::integer;
+		s		text	= random_a_string(min_len, max_len);
+	begin
+		if (true <> (select length(s) >= min_len AND length(s) <= max_len)) then
+			return next 'ALERT! random_a_string sanity test failed.'
+						|| ' min_len: ' || min_len || ' max_len: ' || max_len
+						|| ' string: ' || s;
+		end if;
+	end;
+
+	return next 'Done';
+	return;
+end;
+$$ language plpgsql;
+
 commit transaction;
