@@ -261,7 +261,7 @@ $$ language plpgsql;
 /*
  * Function to generate non-uniform random numbers; see Clause 2.1.6
  */
-create or replace function nurand(A integer, x integer, y integer, C integer) returns integer as $$
+create or replace function NURand(A integer, x integer, y integer, C integer) returns integer as $$
 declare
 begin
 	return (((floor(random() * (A+1))::integer
@@ -383,7 +383,7 @@ begin
 						case when s < 1000 then
 							generate_c_last(s)
 						else
-							generate_c_last(nurand(255, 0, 999,
+							generate_c_last(NURand(255, 0, 999,
 									(select c from c_load)))
 						end 								as C_LAST,
 						random_a_string(10, 20)				as C_STREET_1,
@@ -443,12 +443,17 @@ create or replace function data_load_sanity_tests() returns setof text as $$
 begin
 	/* Ensure that the ORIGINAL string's placement in I_DATA has sufficient variation. */
 	if ((select count(*) from(select distinct position('ORIGINAL' in I_DATA) from ITEM) as v) < 40 ) then
-		return next 'ITEM table has less than 40 distinct placements of ORIGINAL string in I_DATA.';
+		return next 'Less than 40 distinct placements of ORIGINAL string in I_DATA.';
 	end if;
 
 	/* Ensure that the ORIGINAL string's placement in I_DATA has sufficient variation. */
 	if ((select count(*) from(select distinct position('ORIGINAL' in S_DATA) from STOCK) as v) < 40 ) then
-		return next 'STOCK table has less than 40 distinct placements of ORIGINAL string in S_DATA.';
+		return next 'Less than 40 distinct placements of ORIGINAL string in S_DATA.';
+	end if;
+
+	if ((select count(*) from(select distinct c_last from customer where C_W_ID = 1 and C_ID > 1000) as v) < 500 ) then
+		return next 'C_LAST column has very few distinct values.';
+		return next 'HINT: Possibly NURand() is to blame.';
 	end if;
 
 	/*
