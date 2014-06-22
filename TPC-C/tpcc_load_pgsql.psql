@@ -1,0 +1,13 @@
+/*
+ * psql script to load and sanity-test the TPC-C data in Postgres.
+ */
+
+-- Time everything.
+\timing on
+
+\include_relative tpcc_ddl_drop_pgsql.sql
+\include_relative tpcc_ddl_pgsql.sql
+
+select load_item();
+select add_warehouses(1);
+select data_load_sanity_tests();
