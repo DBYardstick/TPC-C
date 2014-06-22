@@ -79,9 +79,10 @@ create table CUSTOMER (
 	C_PHONE			char(16),
 	C_SINCE			timestamp with time zone,
 	C_CREDIT		char(2)	CHECK(C_CREDIT IN ('GC','BC')),
-	C_CREDIT_LIM	numeric(12,2),
-	C_DISCOUNT		numeric(4,4),
-	C_BALANCE		numeric(12,2),
+	C_CREDIT_LIM	numeric(12, 2),
+	C_DISCOUNT		numeric(4, 4),
+	C_BALANCE		numeric(12, 2),
+	C_YTD_PAYMENT	numeric(12, 2),
 	C_PAYMENT_CNT	numeric(4),
 	C_DELIVERY_CNT	numeric(4),
 	C_DATA			varchar(500),
@@ -243,7 +244,34 @@ begin
 end;
 $$ language plpgsql;
 
-/* Load ITEM table.
+/*
+ * Function to generate C_LAST; see Clause 4.3.2.3
+ */
+create or replace function generate_c_last(num integer) returns text as $$
+declare
+	arr		text[]	= array['BAR', 'OUGHT', 'ABLE', 'PRI', 'PRES', 'ESE', 'ANTI', 'CALLY', 'ATION', 'EING'];
+	first	integer = num / 100;
+	second	integer = (num % 100) / 10;
+	third	integer = num % 10;
+begin
+	return arr[first+1] || arr[second+1] || arr[third+1];
+end;
+$$ language plpgsql;
+
+/*
+ * Function to generate non-uniform random numbers; see Clause 2.1.6
+ */
+create or replace function nurand(A integer, x integer, y integer, C integer) returns integer as $$
+declare
+begin
+	return (((floor(random() * (A+1))::integer
+				| (x + floor(random() * ((y + 1) - x))::integer))
+			+ C) % (y - x + 1)) + x;
+end;
+$$ language plpgsql;
+
+/*
+ * Load ITEM table.
  *
  * This is pretty much just one INSERT statement, so a procedure isn't even
  * necessary.
@@ -262,8 +290,7 @@ begin
 				floor(random() * 10000)::integer + 1	as I_IM_ID,
 				random_a_string(14, 24)					as I_NAME,
 				1 + (random() * 100)					as I_PRICE,
-				case
-				when random() < 0.10 then
+				case when random() < 0.10 then
 					(select overlay(str placing 'ORIGINAL' from 1 + floor(random() * (length(str)-8))::integer for 8)
 						from (select random_a_string(26, 50) as str, s as dummy) as v1 )
 				else
@@ -279,6 +306,9 @@ create or replace function add_warehouses(num_warehouses integer default 1) retu
 begin
 	return query
 	with
+	c_load as (	/* Definition of C-Load; see Clause 2.1.6.1 */
+		select floor(random() * 255+1)::integer as c),
+
 	current_wh_count(n) as (
 		select count(*) as n
 		from WAREHOUSE),
@@ -315,8 +345,7 @@ begin
 					0											as S_YTD,
 					0											as S_ORDER_CNT,
 					0											as S_REMOTE_CNT,
-					case
-					when random() < 0.10 then
+					case when random() < 0.10 then
 						(select overlay(str placing 'ORIGINAL' from 1 + floor(random() * (length(str)-8))::integer for 8)
 							from (select random_a_string(26, 50) as str, s as dummy) as v1 )
 					else
@@ -340,7 +369,42 @@ begin
 						3001								as D_NEXT_OID
 				from generate_series(1, 10) as s
 					cross join warehouses_inserted as w
-				returning d_id, d_w_id)
+				returning d_id, d_w_id),
+
+		customers_inserted as (
+			insert into CUSTOMER
+				select	s									as C_ID,
+						d.d_id								as C_D_ID,
+						d.d_w_id							as C_W_ID,
+						random_a_string(8, 16)				as C_FIRST,
+						'OE'								as C_MIDDLE,
+						case when s < 1000 then
+							generate_c_last(s)
+						else
+							generate_c_last(nurand(255, 0, 999,
+									(select c from c_load)))
+						end 								as C_LAST,
+						random_a_string(10, 20)				as C_STREET_1,
+						random_a_string(10, 20)				as C_STREET_2,
+						random_a_string(10, 20)				as C_CITY,
+						random_a_string(2, 2)				as C_STATE,
+						random_n_string(4, 4) || '11111'	as C_ZIP,
+						random_n_string(0, 16)				as C_PHONE,
+						now()								as C_SINCE,
+						case when random() < 0.10 then
+							'BC'
+						else
+							'GC'
+						end									as C_CREDIT,
+						50000								as C_CREDIT_LIM,
+						random() * 0.5						as C_DISCOUNT,
+						-10.00								as C_BALANCE,
+						10.00								as C_YTD_PAYMENT,
+						1									as C_PAYMENT_CNT,
+						0									as C_DELIVERY_CNT,
+						random_a_string(300, 500)			as C_DATA
+				from generate_series(1, 3000) as s
+					cross join districts_inserted as d)
 	select w_id from warehouses_inserted;
 
 	return;
