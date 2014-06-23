@@ -18,7 +18,7 @@ along with TPC.js.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 /* TypeScript headers */
-/// <reference path="typings/node/node.d.ts" />
+/// <reference path="../typings/node/node.d.ts" />
 
 
 var GPLv3Message =
