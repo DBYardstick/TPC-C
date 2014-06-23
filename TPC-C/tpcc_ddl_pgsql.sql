@@ -308,7 +308,7 @@ begin
 	return query
 	with
 	c_load as (	/* Definition of C-Load; see Clause 2.1.6.1 */
-		select floor(random() * 255+1)::integer as c),
+		select floor(random() * (255+1))::integer as c),
 
 	current_wh_count(n) as (
 		select count(*) as n
@@ -427,7 +427,59 @@ begin
 						10						as H_AMOUNT,
 						random_a_string(12, 24)	as H_DATA
 				from generate_series(1, 3000) as s
-					cross join districts_inserted as d)
+					cross join districts_inserted as d),
+
+		/*
+		 * This random permutation currently gets used in all districts' ORDERS
+		 * table. TODO: Consider a way to generate a different random
+		 * permutation for each district.
+		 */
+		O_C_ID_permutation (p) as (
+			select array_agg(s)
+			from (select	s
+					from generate_series(1, 3000) as s
+					order by random()) as v),
+
+		orders_inserted as (
+			insert into ORDERS
+				select	s										as O_ID,
+						d.d_id									as O_D_ID,
+						d.d_w_id								as O_W_ID,
+						(select p[s] from O_C_ID_permutation)	as O_C_ID,
+						clock_timestamp()						as O_ENTRY_D,
+						case when s < 2101 then
+							1 + floor(random() * 10)::integer
+						else
+							null
+						end										as O_CARRIER_ID,
+						5 + floor(random() * (10+1))::integer	as O_OL_CNT,
+						1										as O_ALL_LOCAL
+				from generate_series(1, 3000) as s
+					cross join districts_inserted as d
+				returning *),
+
+		order_line_inserted as (
+			insert into ORDER_LINE
+				select	o_id											as OL_O_ID,
+						o_d_id											as OL_D_ID,
+						o_w_id											as OL_W_ID,
+						v.s												as OL_NUMBER,
+						1+floor(random() * 100000)::integer				as OL_I_ID,
+						o_w_id											as OL_SUPPLY_W_ID,
+						case when o_id < 2101 then
+							o_entry_d
+						else
+							null
+						end												as OL_DELIVERY_D,
+						5												as OL_QUANTITY,
+						case when o_id < 2101 then
+							0
+						else
+							floor(1 + (random() * (999999 + 1)))/100
+						end												as OL_AMOUNT,
+						random_a_string(24, 24)							as OL_DIST_INFO
+				from orders_inserted,
+					lateral (select s from generate_series(1, o_ol_cnt::integer) as s) as v			)
 	select w_id from warehouses_inserted;
 
 	return;
@@ -456,26 +508,46 @@ begin
 		return next 'HINT: Possibly NURand() is to blame.';
 	end if;
 
+	if ((select sum((O_ID = O_C_ID)::integer) from ORDERS where O_W_ID = 1) > 1000 ) then
+		return next 'The random permutation for O_C_ID doesn''t seem to be random enough.';
+	end if;
+
+	if ((select count(distinct O_CARRIER_ID) from ORDERS where O_W_ID = 1) < 10) then
+		return next 'Not all values of O_CARRIER_ID have been used.';
+	end if;
+
+	if ((select min(O_OL_CNT) < 5 OR max(O_OL_CNT) > 15 from ORDERS where O_W_ID = 1)) then
+		return next 'Unexpected values in O_OL_CNT.';
+	end if;
+
+	if ((select count(distinct O_OL_CNT) from ORDERS where O_W_ID = 1) <> 11) then
+		return next 'Each of the values in the range [5, 15] should have been used for O_OL_CNT.';
+	end if;
+
+	if ((select sum(b::integer) from (select  count(*) < 2500 as b from ORDERS where O_W_ID = 1 group by o_ol_cnt) as v) > 0) then
+		return next 'Improper distribution of O_OL_CNT.';
+	end if;
+
 	/*
-	 * Test that random_a_string() returns a string withing the bounds. If this
-	 * test fails even once, the incident should be taken seriosky to review the
-	 * random_a_function(). Because of the random nature of the function, the
+	 * Test that random_a_string() returns a string within the bounds. If this
+	 * test fails even once, the incident should be taken seriosly to review the
+	 * random_a_function(); because of the random nature of the function, the
 	 * bug may not appear again for a long time.
 	 */
 	declare
-		min_len	integer	= floor(random() * 30 + 1)::integer;
-		max_len	integer	= 30 + floor(random() * 65 + 1)::integer;
+		min_len	integer	= floor(random() * (30 + 1))::integer;
+		max_len	integer	= 30 + floor(random() * (65 + 1))::integer;
 		s		text	= random_a_string(min_len, max_len);
 		n		text	= random_n_string(min_len, max_len);
 	begin
 		if (true <> (select length(s) >= min_len AND length(s) <= max_len)) then
-			return next 'ALERT! random_a_string sanity test failed.'
+			return next 'SERIOUS! random_a_string sanity test failed.'
 						|| ' min_len: ' || min_len || ' max_len: ' || max_len
 						|| ' string: ' || s;
 		end if;
 
 		if (true <> (select length(n) >= min_len AND length(n) <= max_len)) then
-			return next 'ALERT! random_n_string sanity test failed.'
+			return next 'SERIOUS! random_n_string sanity test failed.'
 						|| ' min_len: ' || min_len || ' max_len: ' || max_len
 						|| ' string: ' || n;
 		end if;

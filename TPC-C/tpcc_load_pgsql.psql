@@ -5,6 +5,9 @@
 -- Time everything.
 \timing on
 
+-- Stop script processing on an ERROR
+\set ON_ERROR_STOP 1
+
 \include_relative tpcc_ddl_drop_pgsql.sql
 \include_relative tpcc_ddl_pgsql.sql
 
