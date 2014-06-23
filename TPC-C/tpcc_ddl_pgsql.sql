@@ -479,7 +479,14 @@ begin
 						end												as OL_AMOUNT,
 						random_a_string(24, 24)							as OL_DIST_INFO
 				from orders_inserted,
-					lateral (select s from generate_series(1, o_ol_cnt::integer) as s) as v			)
+					lateral (select s from generate_series(1, o_ol_cnt::integer) as s) as v),
+
+		new_order_inserted as (
+			insert into NEW_ORDER
+				select	o_id	as NO_O_ID,
+						o_d_id	as NO_D_ID,
+						o_w_id	as NO_W_ID
+				from orders_inserted where o_id between 2101 and 3000)
 	select w_id from warehouses_inserted;
 
 	return;
@@ -524,8 +531,12 @@ begin
 		return next 'Each of the values in the range [5, 15] should have been used for O_OL_CNT.';
 	end if;
 
-	if ((select sum(b::integer) from (select  count(*) < 2500 as b from ORDERS where O_W_ID = 1 group by o_ol_cnt) as v) > 0) then
+	if (0 = (select sum(r::integer) from (select O_W_ID, O_D_ID, O_OL_CNT, count(*) >= 350 as r from ORDERS group by O_W_ID, O_D_ID, O_OL_CNT) as v)) then
 		return next 'Improper distribution of O_OL_CNT.';
+	end if;
+
+	if (0 = (select sum(r::integer) from (select min(no_o_id) <> 2101 or max(no_o_id) <> 3000 as r from NEW_ORDER group by NO_W_ID, NO_D_ID) as v)) then
+		return next 'Improper min/max values in NO_O_ID.';
 	end if;
 
 	/*
