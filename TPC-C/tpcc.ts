@@ -31,7 +31,7 @@ var blessed = require('blessed');
 /* Create a screen */
 /*
  * XXX: For some inexplicable reason, if this variable is named 'screen', it
- * `tsc` to emit an error, and nothing resolves the error.
+ * causes `tsc` to emit an error, and no amount of diagnosis resolved the error.
  *
  * TODO: Create a definition file for blessed and contribute it to
  * DefinitelyTyped repo.
@@ -42,7 +42,7 @@ var mainScreen: any = blessed.screen();
  * Create a box in top-left corner of the screen, sized just enough to hold a
  * TPC-C terminal's contents.
  */
-var mainBox = blessed.box({
+var mainBox: any = blessed.box({
   parent: mainScreen, /* This box is the only child of the screen */
   top: 'top',
   left: 'left',
@@ -61,7 +61,7 @@ var mainBox = blessed.box({
   }
 });
 
-var headerBox = blessed.box({
+var headerBox: any = blessed.box({
   parent: mainBox,
   left: 'center',
   top: 'top',
@@ -83,7 +83,7 @@ var headerBox = blessed.box({
 });
 
 /* Create a box to display license and warranty message at the bottom of the main box. */
-var licenseBox = blessed.box({
+var licenseBox: any = blessed.box({
   parent: mainBox,
   left: 'center',
   bottom: 0,
@@ -105,7 +105,7 @@ var licenseBox = blessed.box({
 });
 
 /* Remove the license/warranty message after a while */
-var licenseBoxTimeoutHandle = setTimeout(function() {
+var licenseBoxTimeoutHandle: any = setTimeout(function() {
 
   licenseBox.parent.remove(licenseBox);
 
@@ -143,3 +143,6 @@ mainScreen.key(['escape', 'q', 'C-c'], function(ch, key) {
 mainBox.focus();
 
 mainScreen.render();
+
+var terminal: Terminal = new Terminal("1", mainBox);
+
