@@ -201,4 +201,11 @@ non-interactive transactions, the error be logged in log files.
 
 .) All New Order transactions should use freshly generated data before each run.
 
+TODO
+====
 
+1. Clause 2.1.6.1 requires certain characteristics of the runtime constant C and
+		I currently don't understand how those characteristics can be enforced.
+		Also, I don't see where C_LAST is generated during the measurement runs,
+		although admittedly, I have studied only the New Order transaction profile
+		as of now.
