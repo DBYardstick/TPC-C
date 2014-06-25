@@ -46,8 +46,8 @@ var mainBox: any = blessed.box({
   parent: mainScreen, /* This box is the only child of the screen */
   top: 'top',
   left: 'left',
-  width: '500',
-  height: '500',
+  width: '100%',
+  height: '100%',
   tags: true,
   border: {
     type: 'line'
@@ -64,7 +64,7 @@ var mainBox: any = blessed.box({
 var headerBox: any = blessed.box({
   parent: mainBox,
   left: 'center',
-  top: 'top',
+  bottom: 0,
   width: '100%',
   height: '120',
   content: '{center}TPC-C{/center}',
@@ -107,15 +107,17 @@ var licenseBox: any = blessed.box({
 /* Remove the license/warranty message after a while */
 var licenseBoxTimeoutHandle: any = setTimeout(function() {
 
-  licenseBox.parent.remove(licenseBox);
+  //licenseBox.parent.remove(licenseBox);
+  headerBox.parent.remove(headerBox);
 
   mainScreen.render();
 
-  delete licenseBox;  /* Recover the redundant object, and all the event
+  //delete licenseBox;
+    /* Recover the redundant object, and all the event
                        * handlers associated with it.
                        */
 
-}, 3000);
+}, 300);
 
 /* Remove the license/warranty message if someone clicks on it. */
 licenseBox.on('click', function() {
@@ -144,5 +146,4 @@ mainBox.focus();
 
 mainScreen.render();
 
-var terminal: Terminal = new Terminal("1", mainBox);
-
+var terminal: Terminal = new Terminal(1, mainBox);
