@@ -3,22 +3,74 @@ var printf = require('printf');
 
 class Terminal  {
 
-  currentProfile: TransactionProfile;
+  public w_id: number;
   display: any;
+
+  menuProfile: MenuProfile;
+  newOrderProfile: NewOrderProfile;
+
+  currentProfile: TransactionProfile;
 
   /*
    * w_id: Warehouse ID, as stored in database. We use a string type because the
    * TPC-C specification allows this to be any data type.
    */
-  constructor(public w_id: number, display: any) {
+  constructor(w_id: number, display: any) {
+
+    this.w_id = w_id;
     this.display = display;
-    this.currentProfile = new MenuProfile(this);
-    this.setProfile(this.currentProfile);
+
+    this.menuProfile = new MenuProfile(this);
+    this.newOrderProfile = new NewOrderProfile(this);
+
+    this.showMenu();
   }
 
-  setProfile(profile: TransactionProfile) {
-    this.currentProfile = profile;
+  showMenu() {
 
+    var self = this;
+
+    /* Show menu */
+    self.currentProfile = self.menuProfile;
+    self.refreshDisplay();
+
+    /*
+     * There's no wait time between display of the menu and choosing/displaying
+     * input-screen of the next transaction profile. The display of the menu
+     * until the selection of the transaction type is considered part of the
+     * previous transaction output screen's think-time.
+     *
+     * But for our ability to see the menu, I display the menu for one second
+     * before switching screen to the selected transaction profile. This one
+     * second of wait time is then deducted from the think-time.
+     *
+     * XXX If necessary, turn this into a direct call of chooseTransaction(),
+     * and add 1000 ms back to the think time. This may be necessary to
+     * (a) reduce CPU consumption/increase generated load, or (b) to comply with
+     * specification's word, upon insistence by the auditor.
+     */
+     setTimeout(function(){self.chooseTransaction();}, 1000);
+  }
+
+  chooseTransaction() {
+
+    var self = this;
+
+    /* Choose one of the 5 transactions */
+    self.currentProfile = self.newOrderProfile;
+
+    /* Prepare transaction input. */
+    self.currentProfile.prepareInput();
+
+    self.refreshDisplay();
+
+    /* Execute the transaction after the keying time. */
+    setTimeout(function(){
+        self.currentProfile.execute();
+      }, self.currentProfile.getKeyingTime());
+  }
+
+  refreshDisplay() {
     if (this.display !== null) {
       this.display.setContent(this.currentProfile.getScreen());
       this.display.parent.render(); /* Ask the containing screen to re-render itself. */
@@ -37,10 +89,29 @@ class Terminal  {
 var terminals: Terminal[];
 
 interface TransactionProfile {
+
   getScreen() : string;
-  action();
+  getKeyingTime(): number;
+  getThinkTime(): number;  /* Clause 5.2.5.7 */
+
+  /* Prepare fresh input */
+  prepareInput();
+
+  /* Execute the transaction */
+  execute();
+
+  /*
+   * execute() function should register this function as the even-handler for
+   * when the transaction response is received. This function then in turn
+   * should call the terminal's showMenu() after think-time.
+   */
+  receiveTransactionResponse();
 }
 
+/*
+ * This is not really a transaction profile, but implements that interface to
+ * allow for common code to dislay the menu.
+ */
 class MenuProfile implements TransactionProfile {
 
   term: Terminal;
@@ -49,25 +120,24 @@ class MenuProfile implements TransactionProfile {
     var self = this;
 
     self.term = term;
-
-    setTimeout(function(){
-      self.action();
-      }, 1000);
   }
 
   getScreen(): string {
     return menuScreen
   }
 
-  action() {
-    var self = this;
-
-    setTimeout(function() {
-
-      self.term.setProfile(new NewOrderProfile(self.term));
-
-      }, 1000);
+  getKeyingTime(){
+    return 0;
   }
+
+  getThinkTime() {
+    return 0;
+  }
+
+  /* Do-nothing functions */
+  prepareInput(){}
+  execute(){}
+  receiveTransactionResponse(){}
 }
 
 class OrderLineItem {
@@ -92,13 +162,15 @@ class NewOrderProfile implements TransactionProfile {
   o_entry_d: Date;
   o_ol_cnt: number;
   ol_items: OrderLineItem[];
+  total: number;
 
   constructor(term: Terminal) {
+    this.term = term;
+  }
 
-    var self = this;
+  prepareInput() {
+
     var i: number;
-
-    self.term = term;
 
     this.w_tax = 0.10;
     this.d_id = 9;
@@ -118,15 +190,40 @@ class NewOrderProfile implements TransactionProfile {
                                             15-i, 9999, 'G', 200, 200*(15-i));
     }
 
-    setTimeout(function() {
-      self.action();
+    this.total = 0;
+  }
+
+  execute(){
+
+    var self = this;
+
+    /* Do-nothing transaction */
+
+    /* Simulate a transaction that takes 1 second */
+    setTimeout(function(){
+      self.receiveTransactionResponse();
       }, 1000);
+  }
+
+  receiveTransactionResponse(){
+
+    var self = this;
+
+    /*Simulate that the completed transaction provided the order's total amount */
+    self.total = 900;
+
+    self.term.refreshDisplay();
+
+    setTimeout(function(){
+        self.term.showMenu();
+      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
   }
 
   /*
    * Although I tried very hard, this screen layout may not agree with the
    * layout describe in Clause 2.4.3.5. I primarily used the screenshot under
-   * Clause 2.4.3.1 as the guide.
+   * Clause 2.4.3.1 as the guide. N.B: Clause 2.2.1.2's item 5 allows reordering
+   * or repositioning of the fields.
    */
   getScreen(): string {
 
@@ -143,7 +240,9 @@ class NewOrderProfile implements TransactionProfile {
                       .replace('Discount:       '       , printf('Discount: %.4f', this.c_discount))
                       .replace('WTax:       '           , printf('WTax: %.4f', this.w_tax))
                       .replace('DTax:       '           , printf('DTax: %.4f', this.d_tax))
-                      .replace('Order Date:           ' , printf('Order Date: %10s', this.d_tax))
+                      .replace('Order Date:           ' , printf('Order Date: %10s', this.o_entry_d.getFullYear() + '/' + this.o_entry_d.getMonth() + '/' + this.o_entry_d.getDay()))
+                      .replace('Total:       '          , printf('Total: %6.2f', this.total))
+                      ;
 
     for (i = 0; i < 15; ++i) {
       out = out.replace(' ' + (i+11).toString() + '                                                                             ',
@@ -161,15 +260,13 @@ class NewOrderProfile implements TransactionProfile {
     return out;
   }
 
-  action() {
+  getKeyingTime() {
+    return 18000;
+  }
 
-    var self = this;
-
-    setTimeout(function() {
-
-      self.term.setProfile(new MenuProfile(self.term));
-
-      }, 5000);
+  meanThinkTime: number = 12;  /* Clause 5.2.5.7 */
+  getThinkTime() {
+    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
   }
 }
 
