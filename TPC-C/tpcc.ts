@@ -61,34 +61,13 @@ var mainBox: any = blessed.box({
   }
 });
 
-var headerBox: any = blessed.box({
-  parent: mainBox,
-  left: 'center',
-  bottom: 0,
-  width: '100%',
-  height: '120',
-  content: '{center}TPC-C{/center}',
-  tags: true,
-  border: {
-    type: 'line'
-  },
-  style: {
-    fg: 'white',
-    bg: 'black',
-    border: {
-      fg: '#f0f0f0',
-      bg: 'black',
-    },
-  }
-});
-
 /* Create a box to display license and warranty message at the bottom of the main box. */
-var licenseBox: any = blessed.box({
+var adminBox: any = blessed.box({
   parent: mainBox,
   left: 'center',
   bottom: 0,
   width: '100%',
-  height: '250',
+  height: '50%',
   content: '{center}' + GPLv3Message + "{/center}",
   tags: true,
   border: {
@@ -104,38 +83,6 @@ var licenseBox: any = blessed.box({
   }
 });
 
-/* Remove the license/warranty message after a while */
-var licenseBoxTimeoutHandle: any = setTimeout(function() {
-
-  //licenseBox.parent.remove(licenseBox);
-  headerBox.parent.remove(headerBox);
-
-  mainScreen.render();
-
-  //delete licenseBox;
-    /* Recover the redundant object, and all the event
-                       * handlers associated with it.
-                       */
-
-}, 300);
-
-/* Remove the license/warranty message if someone clicks on it. */
-licenseBox.on('click', function() {
-
-  licenseBox.parent.remove(licenseBox);
-
-  mainScreen.render();
-
-  /*
-   * Prevent the timeout function from being called, because we've already done
-   * its work.
-   */
-  clearTimeout(licenseBoxTimeoutHandle);
-
-  delete licenseBox;  /* Recover the redundant object, and all the event
-                       * handlers associated with it.
-                       */
-});
 
 /* End the program on these keys */
 mainScreen.key(['escape', 'q', 'C-c'], function(ch, key) {
@@ -146,4 +93,21 @@ mainBox.focus();
 
 mainScreen.render();
 
-var terminal: Terminal = new Terminal(1, mainBox);
+var terminals: Terminal[] = [];
+
+var i: number;
+var j: number;
+var num_warehouses: number = 1000;
+
+for (i = 1; i <= num_warehouses; ++i) {
+  for (j = 1; j <= 10; ++j) {
+    terminals[(i-1)*10 + (j-1)] = new Terminal(i, null);
+  }
+}
+
+terminals[0].setDisplay(mainBox);
+
+setInterval(function(){
+  adminBox.setContent(getStats());
+  mainScreen.render();
+  }, 3*1000);

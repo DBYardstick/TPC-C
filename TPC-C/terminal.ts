@@ -1,6 +1,115 @@
 
 var printf = require('printf');
 
+var nullDBResponseTime = 0*1000; /* in milliseconds; Response time of the database that doesn't do anything */
+
+var xact_counts: {[transaction: string] : number} = {};
+xact_counts['New Order']    = 0;
+xact_counts['Payment']      = 0;
+xact_counts['Order Status'] = 0;
+xact_counts['Delivery']     = 0;
+xact_counts['Stock Level']  = 0;
+
+var xact_counts_last: {[transaction: string] : number} = {};
+xact_counts_last['New Order']    = 0;
+xact_counts_last['Payment']      = 0;
+xact_counts_last['Order Status'] = 0;
+xact_counts_last['Delivery']     = 0;
+xact_counts_last['Stock Level']  = 0;
+
+var test_start_time: any = new Date();
+var total_xacts_last: number;
+var stats_calc_time_last: any = new Date();  /* TypeScript complains on (Date - Date), so use 'any' data type */
+
+function getStats() {
+  var out: string;
+  var key: string;
+  var now: any = new Date();
+  var seconds_since_last_call = Math.abs(now - stats_calc_time_last)/1000;
+
+  var xact_per_sec: {[transaction: string] : number} = {};
+  xact_per_sec['New Order']    = (xact_counts['New Order']    - xact_counts_last['New Order']   )/seconds_since_last_call;
+  xact_per_sec['Payment']      = (xact_counts['Payment']      - xact_counts_last['Payment']     )/seconds_since_last_call;
+  xact_per_sec['Order Status'] = (xact_counts['Order Status'] - xact_counts_last['Order Status'])/seconds_since_last_call;
+  xact_per_sec['Delivery']     = (xact_counts['Delivery']     - xact_counts_last['Delivery']    )/seconds_since_last_call;
+  xact_per_sec['Stock Level']  = (xact_counts['Stock Level']  - xact_counts_last['Stock Level'] )/seconds_since_last_call;
+
+  var xact_per_min: {[transaction: string] : number} = {};
+  xact_per_min['New Order']    = xact_per_sec['New Order']   * 60;
+  xact_per_min['Payment']      = xact_per_sec['Payment']     * 60;
+  xact_per_min['Order Status'] = xact_per_sec['Order Status']* 60;
+  xact_per_min['Delivery']     = xact_per_sec['Delivery']    * 60;
+  xact_per_min['Stock Level']  = xact_per_sec['Stock Level'] * 60;
+
+  var total_xacts: number =  xact_counts['New Order'] + xact_counts['Payment']
+                            + xact_counts['Order Status'] + xact_counts['Delivery']
+                            + xact_counts['Stock Level'];
+
+  var xact_percent: {[transaction: string] : number} = {};
+  xact_percent['New Order']    = parseFloat(((xact_counts['New Order']    /total_xacts) * 100).toFixed(2));
+  xact_percent['Payment']      = parseFloat(((xact_counts['Payment']      /total_xacts) * 100).toFixed(2));
+  xact_percent['Order Status'] = parseFloat(((xact_counts['Order Status'] /total_xacts) * 100).toFixed(2));
+  xact_percent['Delivery']     = parseFloat(((xact_counts['Delivery']     /total_xacts) * 100).toFixed(2));
+  xact_percent['Stock Level']  = parseFloat(((xact_counts['Stock Level']  /total_xacts) * 100).toFixed(2));
+
+  out = adminScreen
+        .replace('New Order   :                                                       ',
+                  printf('New Order   : %10d %10d %10d %10.2f %10.2f',
+                  xact_counts['New Order'],
+                  xact_per_sec['New Order'],
+                  xact_per_min['New Order'],
+                  xact_percent['New Order'],
+                  60 * xact_counts['New Order']/(Math.abs(now - test_start_time)/1000)))
+        .replace('Payment     :                                                       ',
+                  printf('Payment     : %10d %10d %10d %10.2f %10.2f',
+                  xact_counts['Payment'],
+                  xact_per_sec['Payment'],
+                  xact_per_min['Payment'],
+                  xact_percent['Payment'],
+                  60 * xact_counts['Payment']/(Math.abs(now - test_start_time)/1000)))
+        .replace('Order Status:                                                       ',
+                  printf('Order Status: %10d %10d %10d %10.2f %10.2f',
+                  xact_counts['Order Status'],
+                  xact_per_sec['Order Status'],
+                  xact_per_min['Order Status'],
+                  xact_percent['Order Status'],
+                  60 * xact_counts['Order Status']/(Math.abs(now - test_start_time)/1000)))
+        .replace('Delivery    :                                                       ',
+                  printf('Delivery    : %10d %10d %10d %10.2f %10.2f',
+                  xact_counts['Delivery'],
+                  xact_per_sec['Delivery'],
+                  xact_per_min['Delivery'],
+                  xact_percent['Delivery'],
+                  60 * xact_counts['Delivery']/(Math.abs(now - test_start_time)/1000)))
+        .replace('Stock Level :                                                       ',
+                  printf('Stock Level : %10d %10d %10d %10.2f %10.2f',
+                  xact_counts['Stock Level'],
+                  xact_per_sec['Stock Level'],
+                  xact_per_min['Stock Level'],
+                  xact_percent['Stock Level'],
+                  60 * xact_counts['Stock Level']/(Math.abs(now - test_start_time)/1000)))
+        .replace('Total       :                                                       ',
+                  printf('Total       : %10d %10d %10d %10.2f %10.2f',
+                  total_xacts,
+                  (total_xacts - total_xacts_last)/seconds_since_last_call,
+                  (total_xacts - total_xacts_last)/seconds_since_last_call * 60,
+                  100,
+                  60 * total_xacts/(Math.abs(now - test_start_time)/1000)))
+        .replace('Time:                                        ', printf('Time: %s', now))
+        ;
+
+  xact_counts_last['New Order']    = xact_counts['New Order']    ;
+  xact_counts_last['Payment']      = xact_counts['Payment']      ;
+  xact_counts_last['Order Status'] = xact_counts['Order Status'] ;
+  xact_counts_last['Delivery']     = xact_counts['Delivery']     ;
+  xact_counts_last['Stock Level']  = xact_counts['Stock Level']  ;
+
+  total_xacts_last = total_xacts;
+  stats_calc_time_last = now;
+
+  return out;
+}
+
 class Terminal  {
 
   public w_id: number;
@@ -8,6 +117,10 @@ class Terminal  {
 
   menuProfile: MenuProfile;
   newOrderProfile: NewOrderProfile;
+  paymentProfile: PaymentProfile;
+  orderStatusProfile: OrderStatusProfile;
+  deliveryProfile: DeliveryProfile;
+  stockLevelProfile: StockLevelProfile;
 
   currentProfile: TransactionProfile;
 
@@ -20,8 +133,12 @@ class Terminal  {
     this.w_id = w_id;
     this.display = display;
 
-    this.menuProfile = new MenuProfile(this);
-    this.newOrderProfile = new NewOrderProfile(this);
+    this.menuProfile        = new MenuProfile(this);
+    this.newOrderProfile    = new NewOrderProfile(this);
+    this.paymentProfile     = new PaymentProfile(this);
+    this.orderStatusProfile = new OrderStatusProfile(this);
+    this.deliveryProfile    = new DeliveryProfile(this);
+    this.stockLevelProfile  = new StockLevelProfile(this);
 
     this.showMenu();
   }
@@ -45,19 +162,46 @@ class Terminal  {
      * second of wait time is then deducted from the think-time.
      *
      * XXX If necessary, turn this into a direct call of chooseTransaction(),
-     * and add 1000 ms back to the think time. This may be necessary to
+     * and add 1000 ms back to the think times. This may be necessary to
      * (a) reduce CPU consumption/increase generated load, or (b) to comply with
      * specification's word, upon insistence by the auditor.
      */
-     setTimeout(function(){self.chooseTransaction();}, 1000);
+     //setTimeout(function(){self.chooseTransaction();}, 1000);
+     self.chooseTransaction();
   }
 
   chooseTransaction() {
 
     var self = this;
 
-    /* Choose one of the 5 transactions */
-    self.currentProfile = self.newOrderProfile;
+    var rand = Math.random() * 100;
+
+    /* Choose one of the 5 transactions; per Clause 5.2.3 */
+    if (rand <= 4) {
+
+      self.currentProfile = self.stockLevelProfile;
+      ++xact_counts["Stock Level"];
+
+    } else if (rand <= 8) {
+
+      self.currentProfile = self.deliveryProfile;
+      ++xact_counts["Delivery"];
+
+    } else if (rand <= 12) {
+
+      self.currentProfile = self.orderStatusProfile;
+      ++xact_counts["Order Status"];
+
+    } else if (rand <= 55) {
+
+      self.currentProfile = self.paymentProfile;
+      ++xact_counts["Payment"];
+
+    } else {
+
+      self.currentProfile = self.newOrderProfile;
+      ++xact_counts["New Order"];
+    }
 
     /* Prepare transaction input. */
     self.currentProfile.prepareInput();
@@ -86,12 +230,10 @@ class Terminal  {
   }
 }
 
-var terminals: Terminal[];
-
 interface TransactionProfile {
 
   getScreen() : string;
-  getKeyingTime(): number;
+  getKeyingTime(): number; /* Clause 5.2.5.7 */
   getThinkTime(): number;  /* Clause 5.2.5.7 */
 
   /* Prepare fresh input */
@@ -168,6 +310,15 @@ class NewOrderProfile implements TransactionProfile {
     this.term = term;
   }
 
+  getKeyingTime() {
+    return 18000;  /* Clause 5.2.5.7 */
+  }
+
+  meanThinkTime: number = 12;  /* Clause 5.2.5.7 */
+  getThinkTime() {
+    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
+  }
+
   prepareInput() {
 
     var i: number;
@@ -202,7 +353,7 @@ class NewOrderProfile implements TransactionProfile {
     /* Simulate a transaction that takes 1 second */
     setTimeout(function(){
       self.receiveTransactionResponse();
-      }, 1000);
+      }, nullDBResponseTime);
   }
 
   receiveTransactionResponse(){
@@ -259,14 +410,225 @@ class NewOrderProfile implements TransactionProfile {
 
     return out;
   }
+}
+
+class PaymentProfile implements TransactionProfile {
+
+  term: Terminal;  /* term.w_id is the terminal's warehouse */
+  status: string;  /* TODO: remove this and add actual variables */
+
+  constructor(term: Terminal) {
+    this.term = term;
+  }
 
   getKeyingTime() {
-    return 18000;
+    return 3000;  /* Clause 5.2.5.7 */
   }
 
   meanThinkTime: number = 12;  /* Clause 5.2.5.7 */
   getThinkTime() {
     return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
+  }
+
+  prepareInput() {
+
+    this.status = 'P';
+  }
+
+  execute(){
+
+    var self = this;
+
+    self.status = 'E';
+
+    /* Do-nothing transaction */
+
+    /* Simulate a transaction that takes 1 second */
+    setTimeout(function(){
+      self.receiveTransactionResponse();
+      }, nullDBResponseTime);
+  }
+
+  receiveTransactionResponse(){
+
+    var self = this;
+
+    self.status = 'R';
+
+    self.term.refreshDisplay();
+
+    setTimeout(function(){
+        self.term.showMenu();
+      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+  }
+
+  getScreen(): string {
+      return paymentScreen.replace('Status:  ', 'Status: ' + this.status);
+  }
+}
+
+class OrderStatusProfile implements TransactionProfile {
+
+  term: Terminal;  /* term.w_id is the terminal's warehouse */
+  status: string;  /* TODO: remove this and add actual variables */
+
+  constructor(term: Terminal) {
+    this.term = term;
+  }
+
+  getKeyingTime() {
+    return 2000;  /* Clause 5.2.5.7 */
+  }
+
+  meanThinkTime: number = 10;  /* Clause 5.2.5.7 */
+  getThinkTime() {
+    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
+  }
+
+  prepareInput() {
+
+    this.status = 'P';
+  }
+
+  execute(){
+
+    var self = this;
+
+    self.status = 'E';
+
+    /* Do-nothing transaction */
+
+    /* Simulate a transaction that takes 1 second */
+    setTimeout(function(){
+      self.receiveTransactionResponse();
+      }, nullDBResponseTime);
+  }
+
+  receiveTransactionResponse(){
+
+    var self = this;
+
+    self.status = 'R';
+
+    self.term.refreshDisplay();
+
+    setTimeout(function(){
+        self.term.showMenu();
+      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+  }
+
+  getScreen(): string {
+      return orderStatusScreen.replace('Status:  ', 'Status: ' + this.status);
+  }
+}
+
+class DeliveryProfile implements TransactionProfile {
+
+  term: Terminal;  /* term.w_id is the terminal's warehouse */
+  status: string;  /* TODO: remove this and add actual variables */
+
+  constructor(term: Terminal) {
+    this.term = term;
+  }
+
+  getKeyingTime() {
+    return 2000;  /* Clause 5.2.5.7 */
+  }
+
+  meanThinkTime: number = 5;  /* Clause 5.2.5.7 */
+  getThinkTime() {
+    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
+  }
+
+  prepareInput() {
+
+    this.status = 'P';
+  }
+
+  execute(){
+
+    var self = this;
+
+    self.status = 'E';
+
+    /* Do-nothing transaction */
+
+    /* Simulate a transaction that takes 1 second */
+    setTimeout(function(){
+      self.receiveTransactionResponse();
+      }, nullDBResponseTime);
+  }
+
+  receiveTransactionResponse(){
+
+    var self = this;
+
+    self.status = 'R';
+
+    self.term.refreshDisplay();
+
+    setTimeout(function(){
+        self.term.showMenu();
+      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+  }
+
+  getScreen(): string {
+      return deliveryScreen.replace('Status:  ', 'Status: ' + this.status);
+  }
+}
+
+class StockLevelProfile implements TransactionProfile {
+
+  term: Terminal;  /* term.w_id is the terminal's warehouse */
+  status: string;  /* TODO: remove this and add actual variables */
+
+  constructor(term: Terminal) {
+    this.term = term;
+  }
+
+  getKeyingTime() {
+    return 2000;  /* Clause 5.2.5.7 */
+  }
+
+  meanThinkTime: number = 5;  /* Clause 5.2.5.7 */
+  getThinkTime() {
+    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
+  }
+
+  prepareInput() {
+
+    this.status = 'P';
+  }
+
+  execute(){
+
+    var self = this;
+
+    self.status = 'E';
+
+    /* Do-nothing transaction */
+
+    /* Simulate a transaction that takes 1 second */
+    setTimeout(function(){
+      self.receiveTransactionResponse();
+      }, nullDBResponseTime);
+  }
+
+  receiveTransactionResponse(){
+
+    var self = this;
+
+    self.status = 'R';
+
+    self.term.refreshDisplay();
+
+    setTimeout(function(){
+        self.term.showMenu();
+      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+  }
+
+  getScreen(): string {
+      return deliveryScreen.replace('Status:  ', 'Status: ' + this.status);
   }
 }
 
@@ -327,5 +689,151 @@ var newOrderScreen: string =
 /*21*/+"| 24                                                                             |\n"
 /*22*/+"| 25                                                                             |\n"
 /*23*/+"| ItemNotFoundMessage                                                            |\n"
+/*24*/+"|________________________________________________________________________________|\n"
+;
+
+var paymentScreen: string =
+//       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+/*01*/ "|--------------------------------------------------------------------------------|\n"
+/*02*/+"|                                                                                |\n"
+/*03*/+"|                                 Payment                                        |\n"
+/*04*/+"|                                                                                |\n"
+/*05*/+"| Status:                                                                        |\n"
+/*06*/+"|                                                                                |\n"
+/*07*/+"|                                                                                |\n"
+/*08*/+"|                                                                                |\n"
+/*10*/+"|                                                                                |\n"
+/*11*/+"|                                                                                |\n"
+/*12*/+"|                                                                                |\n"
+/*13*/+"|                                                                                |\n"
+/*14*/+"|                                                                                |\n"
+/*09*/+"|                                                                                |\n"
+/*15*/+"|                                                                                |\n"
+/*16*/+"|                                                                                |\n"
+/*17*/+"|                                                                                |\n"
+/*18*/+"|                                                                                |\n"
+/*19*/+"|                                                                                |\n"
+/*20*/+"|                                                                                |\n"
+/*21*/+"|                                                                                |\n"
+/*22*/+"|                                                                                |\n"
+/*23*/+"|                                                                                |\n"
+/*24*/+"|________________________________________________________________________________|\n"
+;
+
+var orderStatusScreen: string =
+//       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+/*01*/ "|--------------------------------------------------------------------------------|\n"
+/*02*/+"|                                                                                |\n"
+/*03*/+"|                              Order Status                                      |\n"
+/*04*/+"|                                                                                |\n"
+/*05*/+"| Status:                                                                        |\n"
+/*06*/+"|                                                                                |\n"
+/*07*/+"|                                                                                |\n"
+/*08*/+"|                                                                                |\n"
+/*10*/+"|                                                                                |\n"
+/*11*/+"|                                                                                |\n"
+/*12*/+"|                                                                                |\n"
+/*13*/+"|                                                                                |\n"
+/*14*/+"|                                                                                |\n"
+/*09*/+"|                                                                                |\n"
+/*15*/+"|                                                                                |\n"
+/*16*/+"|                                                                                |\n"
+/*17*/+"|                                                                                |\n"
+/*18*/+"|                                                                                |\n"
+/*19*/+"|                                                                                |\n"
+/*20*/+"|                                                                                |\n"
+/*21*/+"|                                                                                |\n"
+/*22*/+"|                                                                                |\n"
+/*23*/+"|                                                                                |\n"
+/*24*/+"|________________________________________________________________________________|\n"
+;
+
+var deliveryScreen: string =
+//       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+/*01*/ "|--------------------------------------------------------------------------------|\n"
+/*02*/+"|                                                                                |\n"
+/*03*/+"|                                Delivery                                        |\n"
+/*04*/+"|                                                                                |\n"
+/*05*/+"| Status:                                                                        |\n"
+/*06*/+"|                                                                                |\n"
+/*07*/+"|                                                                                |\n"
+/*08*/+"|                                                                                |\n"
+/*10*/+"|                                                                                |\n"
+/*11*/+"|                                                                                |\n"
+/*12*/+"|                                                                                |\n"
+/*13*/+"|                                                                                |\n"
+/*14*/+"|                                                                                |\n"
+/*09*/+"|                                                                                |\n"
+/*15*/+"|                                                                                |\n"
+/*16*/+"|                                                                                |\n"
+/*17*/+"|                                                                                |\n"
+/*18*/+"|                                                                                |\n"
+/*19*/+"|                                                                                |\n"
+/*20*/+"|                                                                                |\n"
+/*21*/+"|                                                                                |\n"
+/*22*/+"|                                                                                |\n"
+/*23*/+"|                                                                                |\n"
+/*24*/+"|________________________________________________________________________________|\n"
+;
+
+var stockLevelScreen: string =
+//       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+/*01*/ "|--------------------------------------------------------------------------------|\n"
+/*02*/+"|                                                                                |\n"
+/*03*/+"|                               Stock Level                                      |\n"
+/*04*/+"|                                                                                |\n"
+/*05*/+"| Status:                                                                        |\n"
+/*06*/+"|                                                                                |\n"
+/*07*/+"|                                                                                |\n"
+/*08*/+"|                                                                                |\n"
+/*10*/+"|                                                                                |\n"
+/*11*/+"|                                                                                |\n"
+/*12*/+"|                                                                                |\n"
+/*13*/+"|                                                                                |\n"
+/*14*/+"|                                                                                |\n"
+/*09*/+"|                                                                                |\n"
+/*15*/+"|                                                                                |\n"
+/*16*/+"|                                                                                |\n"
+/*17*/+"|                                                                                |\n"
+/*18*/+"|                                                                                |\n"
+/*19*/+"|                                                                                |\n"
+/*20*/+"|                                                                                |\n"
+/*21*/+"|                                                                                |\n"
+/*22*/+"|                                                                                |\n"
+/*23*/+"|                                                                                |\n"
+/*24*/+"|________________________________________________________________________________|\n"
+;
+
+xact_counts["New Order"] = 0;
+xact_counts["Payment"] = 0;
+xact_counts["Order Status"] = 0;
+xact_counts["Delivery"] = 0;
+xact_counts["Stock Level"] = 0;
+
+var adminScreen: string =
+//       01234567890123456789012345678901234567890123456789012345678901234567890123456789
+/*01*/ "|--------------------------------------------------------------------------------|\n"
+/*02*/+"|                               TPC-C Admin                                      |\n"
+/*03*/+"| Time:                                                                          |\n"
+/*04*/+"|                                  /s       /min          %    avg/min           |\n"
+/*05*/+"| New Order   :                                                                  |\n"
+/*06*/+"| Payment     :                                                                  |\n"
+/*07*/+"| Order Status:                                                                  |\n"
+/*08*/+"| Delivery    :                                                                  |\n"
+/*10*/+"| Stock Level :                                                                  |\n"
+/*11*/+"| Total       :                                                                  |\n"
+/*12*/+"|                                                                                |\n"
+/*13*/+"|                                                                                |\n"
+/*14*/+"|                                                                                |\n"
+/*09*/+"|                                                                                |\n"
+/*15*/+"|                                                                                |\n"
+/*16*/+"|                                                                                |\n"
+/*17*/+"|                                                                                |\n"
+/*18*/+"|                                                                                |\n"
+/*19*/+"|                                                                                |\n"
+/*20*/+"|                                                                                |\n"
+/*21*/+"|                                                                                |\n"
+/*22*/+"|                                                                                |\n"
+/*23*/+"|                                                                                |\n"
 /*24*/+"|________________________________________________________________________________|\n"
 ;
