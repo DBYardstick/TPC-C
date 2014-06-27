@@ -110,4 +110,4 @@ terminals[0].setDisplay(mainBox);
 setInterval(function(){
   adminBox.setContent(getStats());
   mainScreen.render();
-  }, 3*1000);
+  }, 1*1000);

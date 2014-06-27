@@ -18,7 +18,7 @@ xact_counts_last['Delivery']     = 0;
 xact_counts_last['Stock Level']  = 0;
 
 var test_start_time: any = new Date();
-var total_xacts_last: number;
+var total_xacts_last: number = 0;
 var stats_calc_time_last: any = new Date();  /* TypeScript complains on (Date - Date), so use 'any' data type */
 
 function getStats() {
@@ -45,6 +45,12 @@ function getStats() {
                             + xact_counts['Order Status'] + xact_counts['Delivery']
                             + xact_counts['Stock Level'];
 
+  var total_xact_per_minute = xact_per_min['New Order']
+                              + xact_per_min['Payment']
+                              + xact_per_min['Order Status']
+                              + xact_per_min['Delivery']
+                              + xact_per_min['Stock Level'];
+
   var xact_percent: {[transaction: string] : number} = {};
   xact_percent['New Order']    = parseFloat(((xact_counts['New Order']    /total_xacts) * 100).toFixed(2));
   xact_percent['Payment']      = parseFloat(((xact_counts['Payment']      /total_xacts) * 100).toFixed(2));
@@ -53,44 +59,50 @@ function getStats() {
   xact_percent['Stock Level']  = parseFloat(((xact_counts['Stock Level']  /total_xacts) * 100).toFixed(2));
 
   out = adminScreen
-        .replace('New Order   :                                                       ',
-                  printf('New Order   : %10d %10d %10d %10.2f %10.2f',
+        .replace('New Order   :                                                          ',
+                  printf('New Order   : %10d %6.2f %10d %10d %6.2f %10d',
                   xact_counts['New Order'],
+                  xact_percent['New Order'],
                   xact_per_sec['New Order'],
                   xact_per_min['New Order'],
-                  xact_percent['New Order'],
+                  (xact_per_min['New Order']/total_xact_per_minute)*100,
                   60 * xact_counts['New Order']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Payment     :                                                       ',
-                  printf('Payment     : %10d %10d %10d %10.2f %10.2f',
+        .replace('Payment     :                                                          ',
+                  printf('Payment     : %10d %6.2f %10d %10d %6.2f %10d',
                   xact_counts['Payment'],
+                  xact_percent['Payment'],
                   xact_per_sec['Payment'],
                   xact_per_min['Payment'],
-                  xact_percent['Payment'],
+                  (xact_per_min['Payment']/total_xact_per_minute)*100,
                   60 * xact_counts['Payment']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Order Status:                                                       ',
-                  printf('Order Status: %10d %10d %10d %10.2f %10.2f',
+        .replace('Order Status:                                                          ',
+                  printf('Order Status: %10d %6.2f %10d %10d %6.2f %10d',
                   xact_counts['Order Status'],
+                  xact_percent['Order Status'],
                   xact_per_sec['Order Status'],
                   xact_per_min['Order Status'],
-                  xact_percent['Order Status'],
+                  (xact_per_min['Order Status']/total_xact_per_minute)*100,
                   60 * xact_counts['Order Status']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Delivery    :                                                       ',
-                  printf('Delivery    : %10d %10d %10d %10.2f %10.2f',
+        .replace('Delivery    :                                                          ',
+                  printf('Delivery    : %10d %6.2f %10d %10d %6.2f %10d',
                   xact_counts['Delivery'],
+                  xact_percent['Delivery'],
                   xact_per_sec['Delivery'],
                   xact_per_min['Delivery'],
-                  xact_percent['Delivery'],
+                  (xact_per_min['Delivery']/total_xact_per_minute)*100,
                   60 * xact_counts['Delivery']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Stock Level :                                                       ',
-                  printf('Stock Level : %10d %10d %10d %10.2f %10.2f',
+        .replace('Stock Level :                                                          ',
+                  printf('Stock Level : %10d %6.2f %10d %10d %6.2f %10d',
                   xact_counts['Stock Level'],
+                  xact_percent['Stock Level'],
                   xact_per_sec['Stock Level'],
                   xact_per_min['Stock Level'],
-                  xact_percent['Stock Level'],
+                  (xact_per_min['Stock Level']/total_xact_per_minute)*100,
                   60 * xact_counts['Stock Level']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Total       :                                                       ',
-                  printf('Total       : %10d %10d %10d %10.2f %10.2f',
+        .replace('Total       :                                                          ',
+                  printf('Total       : %10d %6.2f %10d %10d %6.2f %10d',
                   total_xacts,
+                  100,
                   (total_xacts - total_xacts_last)/seconds_since_last_call,
                   (total_xacts - total_xacts_last)/seconds_since_last_call * 60,
                   100,
@@ -177,30 +189,16 @@ class Terminal  {
     var rand = Math.random() * 100;
 
     /* Choose one of the 5 transactions; per Clause 5.2.3 */
-    if (rand <= 4) {
-
+    if (rand < 4) {
       self.currentProfile = self.stockLevelProfile;
-      ++xact_counts["Stock Level"];
-
-    } else if (rand <= 8) {
-
+    } else if (rand < 8) {
       self.currentProfile = self.deliveryProfile;
-      ++xact_counts["Delivery"];
-
-    } else if (rand <= 12) {
-
+    } else if (rand < 12) {
       self.currentProfile = self.orderStatusProfile;
-      ++xact_counts["Order Status"];
-
-    } else if (rand <= 55) {
-
+    } else if (rand < 55) {
       self.currentProfile = self.paymentProfile;
-      ++xact_counts["Payment"];
-
     } else {
-
       self.currentProfile = self.newOrderProfile;
-      ++xact_counts["New Order"];
     }
 
     /* Prepare transaction input. */
@@ -360,6 +358,8 @@ class NewOrderProfile implements TransactionProfile {
 
     var self = this;
 
+    ++xact_counts['New Order'];
+
     /*Simulate that the completed transaction provided the order's total amount */
     self.total = 900;
 
@@ -453,6 +453,8 @@ class PaymentProfile implements TransactionProfile {
 
     var self = this;
 
+    ++xact_counts['Payment'];
+
     self.status = 'R';
 
     self.term.refreshDisplay();
@@ -507,6 +509,8 @@ class OrderStatusProfile implements TransactionProfile {
   receiveTransactionResponse(){
 
     var self = this;
+
+    ++xact_counts['Order Status'];
 
     self.status = 'R';
 
@@ -563,6 +567,8 @@ class DeliveryProfile implements TransactionProfile {
 
     var self = this;
 
+    ++xact_counts['Delivery'];
+
     self.status = 'R';
 
     self.term.refreshDisplay();
@@ -617,6 +623,8 @@ class StockLevelProfile implements TransactionProfile {
   receiveTransactionResponse(){
 
     var self = this;
+
+    ++xact_counts['Stock Level'];
 
     self.status = 'R';
 
@@ -815,7 +823,7 @@ var adminScreen: string =
 /*01*/ "|--------------------------------------------------------------------------------|\n"
 /*02*/+"|                               TPC-C Admin                                      |\n"
 /*03*/+"| Time:                                                                          |\n"
-/*04*/+"|                                  /s       /min          %    avg/min           |\n"
+/*04*/+"|                    Total  %/Tot         /s       /min  %/min    avg/min        |\n"
 /*05*/+"| New Order   :                                                                  |\n"
 /*06*/+"| Payment     :                                                                  |\n"
 /*07*/+"| Order Status:                                                                  |\n"
