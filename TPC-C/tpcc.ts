@@ -93,21 +93,24 @@ mainBox.focus();
 
 mainScreen.render();
 
-var terminals: Terminal[] = [];
-
 var i: number;
 var j: number;
 var num_warehouses: number = 1000;
+var terminals: Terminal[] = [];
 
 for (i = 1; i <= num_warehouses; ++i) {
   for (j = 1; j <= 10; ++j) {
-    terminals[(i-1)*10 + (j-1)] = new Terminal(i, null);
+    terminals[(i-1)*10 + (j-1)] = new Terminal(i, new NullDB(), (i === 1 && j === 1) ? mainBox : null);
   }
 }
 
-terminals[0].setDisplay(mainBox);
+(function () {
+  var stats: TPCCStats = new TPCCStats();
 
-setInterval(function(){
-  adminBox.setContent(getStats());
-  mainScreen.render();
-  }, 1*1000);
+  setInterval(function(){
+
+    adminBox.setContent(stats.getStats());
+
+    mainScreen.render();
+    }, 1*1000);
+})();

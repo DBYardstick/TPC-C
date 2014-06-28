@@ -10,121 +10,135 @@ xact_counts['Order Status'] = 0;
 xact_counts['Delivery']     = 0;
 xact_counts['Stock Level']  = 0;
 
-var xact_counts_last: {[transaction: string] : number} = {};
-xact_counts_last['New Order']    = 0;
-xact_counts_last['Payment']      = 0;
-xact_counts_last['Order Status'] = 0;
-xact_counts_last['Delivery']     = 0;
-xact_counts_last['Stock Level']  = 0;
+class TPCCStats {
 
-var test_start_time: any = new Date();
-var total_xacts_last: number = 0;
-var stats_calc_time_last: any = new Date();  /* TypeScript complains on (Date - Date), so use 'any' data type */
+  xact_counts_last: {[transaction: string] : number};
+  test_start_time: any;
+  total_xacts_last: number;
+  stats_calc_time_last: any;  /* TypeScript complains on (Date - Date), so use 'any' data type */
 
-function getStats() {
-  var out: string;
-  var key: string;
-  var now: any = new Date();
-  var seconds_since_last_call = Math.abs(now - stats_calc_time_last)/1000;
+  constructor() {
+    var t = this;
 
-  var xact_per_sec: {[transaction: string] : number} = {};
-  xact_per_sec['New Order']    = (xact_counts['New Order']    - xact_counts_last['New Order']   )/seconds_since_last_call;
-  xact_per_sec['Payment']      = (xact_counts['Payment']      - xact_counts_last['Payment']     )/seconds_since_last_call;
-  xact_per_sec['Order Status'] = (xact_counts['Order Status'] - xact_counts_last['Order Status'])/seconds_since_last_call;
-  xact_per_sec['Delivery']     = (xact_counts['Delivery']     - xact_counts_last['Delivery']    )/seconds_since_last_call;
-  xact_per_sec['Stock Level']  = (xact_counts['Stock Level']  - xact_counts_last['Stock Level'] )/seconds_since_last_call;
+    t.xact_counts_last                 = {};
+    t.xact_counts_last['New Order']    = 0;
+    t.xact_counts_last['Payment']      = 0;
+    t.xact_counts_last['Order Status'] = 0;
+    t.xact_counts_last['Delivery']     = 0;
+    t.xact_counts_last['Stock Level']  = 0;
+    t.test_start_time                  = new Date();
+    t.stats_calc_time_last             = t.test_start_time;
+    t.total_xacts_last                 = 0;
+  }
 
-  var xact_per_min: {[transaction: string] : number} = {};
-  xact_per_min['New Order']    = xact_per_sec['New Order']   * 60;
-  xact_per_min['Payment']      = xact_per_sec['Payment']     * 60;
-  xact_per_min['Order Status'] = xact_per_sec['Order Status']* 60;
-  xact_per_min['Delivery']     = xact_per_sec['Delivery']    * 60;
-  xact_per_min['Stock Level']  = xact_per_sec['Stock Level'] * 60;
+  getStats() {
+    var t = this; /* Short name */
 
-  var total_xacts: number =  xact_counts['New Order'] + xact_counts['Payment']
-                            + xact_counts['Order Status'] + xact_counts['Delivery']
-                            + xact_counts['Stock Level'];
+    var out: string;
+    var key: string;
+    var now: any = new Date();
+    var seconds_since_last_call = Math.abs(now - t.stats_calc_time_last)/1000;
 
-  var total_xact_per_minute = xact_per_min['New Order']
-                              + xact_per_min['Payment']
-                              + xact_per_min['Order Status']
-                              + xact_per_min['Delivery']
-                              + xact_per_min['Stock Level'];
+    var xact_per_sec: {[transaction: string] : number} = {};
+    xact_per_sec['New Order']    = (xact_counts['New Order']    - t.xact_counts_last['New Order']   )/seconds_since_last_call;
+    xact_per_sec['Payment']      = (xact_counts['Payment']      - t.xact_counts_last['Payment']     )/seconds_since_last_call;
+    xact_per_sec['Order Status'] = (xact_counts['Order Status'] - t.xact_counts_last['Order Status'])/seconds_since_last_call;
+    xact_per_sec['Delivery']     = (xact_counts['Delivery']     - t.xact_counts_last['Delivery']    )/seconds_since_last_call;
+    xact_per_sec['Stock Level']  = (xact_counts['Stock Level']  - t.xact_counts_last['Stock Level'] )/seconds_since_last_call;
 
-  var xact_percent: {[transaction: string] : number} = {};
-  xact_percent['New Order']    = parseFloat(((xact_counts['New Order']    /total_xacts) * 100).toFixed(2));
-  xact_percent['Payment']      = parseFloat(((xact_counts['Payment']      /total_xacts) * 100).toFixed(2));
-  xact_percent['Order Status'] = parseFloat(((xact_counts['Order Status'] /total_xacts) * 100).toFixed(2));
-  xact_percent['Delivery']     = parseFloat(((xact_counts['Delivery']     /total_xacts) * 100).toFixed(2));
-  xact_percent['Stock Level']  = parseFloat(((xact_counts['Stock Level']  /total_xacts) * 100).toFixed(2));
+    var xact_per_min: {[transaction: string] : number} = {};
+    xact_per_min['New Order']    = xact_per_sec['New Order']   * 60;
+    xact_per_min['Payment']      = xact_per_sec['Payment']     * 60;
+    xact_per_min['Order Status'] = xact_per_sec['Order Status']* 60;
+    xact_per_min['Delivery']     = xact_per_sec['Delivery']    * 60;
+    xact_per_min['Stock Level']  = xact_per_sec['Stock Level'] * 60;
 
-  out = adminScreen
-        .replace('New Order   :                                                          ',
-                  printf('New Order   : %10d %6.2f %10d %10d %6.2f %10d',
-                  xact_counts['New Order'],
-                  xact_percent['New Order'],
-                  xact_per_sec['New Order'],
-                  xact_per_min['New Order'],
-                  (xact_per_min['New Order']/total_xact_per_minute)*100,
-                  60 * xact_counts['New Order']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Payment     :                                                          ',
-                  printf('Payment     : %10d %6.2f %10d %10d %6.2f %10d',
-                  xact_counts['Payment'],
-                  xact_percent['Payment'],
-                  xact_per_sec['Payment'],
-                  xact_per_min['Payment'],
-                  (xact_per_min['Payment']/total_xact_per_minute)*100,
-                  60 * xact_counts['Payment']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Order Status:                                                          ',
-                  printf('Order Status: %10d %6.2f %10d %10d %6.2f %10d',
-                  xact_counts['Order Status'],
-                  xact_percent['Order Status'],
-                  xact_per_sec['Order Status'],
-                  xact_per_min['Order Status'],
-                  (xact_per_min['Order Status']/total_xact_per_minute)*100,
-                  60 * xact_counts['Order Status']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Delivery    :                                                          ',
-                  printf('Delivery    : %10d %6.2f %10d %10d %6.2f %10d',
-                  xact_counts['Delivery'],
-                  xact_percent['Delivery'],
-                  xact_per_sec['Delivery'],
-                  xact_per_min['Delivery'],
-                  (xact_per_min['Delivery']/total_xact_per_minute)*100,
-                  60 * xact_counts['Delivery']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Stock Level :                                                          ',
-                  printf('Stock Level : %10d %6.2f %10d %10d %6.2f %10d',
-                  xact_counts['Stock Level'],
-                  xact_percent['Stock Level'],
-                  xact_per_sec['Stock Level'],
-                  xact_per_min['Stock Level'],
-                  (xact_per_min['Stock Level']/total_xact_per_minute)*100,
-                  60 * xact_counts['Stock Level']/(Math.abs(now - test_start_time)/1000)))
-        .replace('Total       :                                                          ',
-                  printf('Total       : %10d %6.2f %10d %10d %6.2f %10d',
-                  total_xacts,
-                  100,
-                  (total_xacts - total_xacts_last)/seconds_since_last_call,
-                  (total_xacts - total_xacts_last)/seconds_since_last_call * 60,
-                  100,
-                  60 * total_xacts/(Math.abs(now - test_start_time)/1000)))
-        .replace('Time:                                        ', printf('Time: %s', now))
-        ;
+    var total_xacts: number =  xact_counts['New Order'] + xact_counts['Payment']
+                              + xact_counts['Order Status'] + xact_counts['Delivery']
+                              + xact_counts['Stock Level'];
 
-  xact_counts_last['New Order']    = xact_counts['New Order']    ;
-  xact_counts_last['Payment']      = xact_counts['Payment']      ;
-  xact_counts_last['Order Status'] = xact_counts['Order Status'] ;
-  xact_counts_last['Delivery']     = xact_counts['Delivery']     ;
-  xact_counts_last['Stock Level']  = xact_counts['Stock Level']  ;
+    var total_xact_per_minute = xact_per_min['New Order']
+                                + xact_per_min['Payment']
+                                + xact_per_min['Order Status']
+                                + xact_per_min['Delivery']
+                                + xact_per_min['Stock Level'];
 
-  total_xacts_last = total_xacts;
-  stats_calc_time_last = now;
+    var xact_percent: {[transaction: string] : number} = {};
+    xact_percent['New Order']    = parseFloat(((xact_counts['New Order']    /total_xacts) * 100).toFixed(2));
+    xact_percent['Payment']      = parseFloat(((xact_counts['Payment']      /total_xacts) * 100).toFixed(2));
+    xact_percent['Order Status'] = parseFloat(((xact_counts['Order Status'] /total_xacts) * 100).toFixed(2));
+    xact_percent['Delivery']     = parseFloat(((xact_counts['Delivery']     /total_xacts) * 100).toFixed(2));
+    xact_percent['Stock Level']  = parseFloat(((xact_counts['Stock Level']  /total_xacts) * 100).toFixed(2));
 
-  return out;
+    out = adminScreen
+          .replace('New Order   :                                                          ',
+                    printf('New Order   : %10d %6.2f %10d %10d %6.2f %10d',
+                    xact_counts['New Order'],
+                    xact_percent['New Order'],
+                    xact_per_sec['New Order'],
+                    xact_per_min['New Order'],
+                    (xact_per_min['New Order']/total_xact_per_minute)*100,
+                    60 * xact_counts['New Order']/(Math.abs(now - t.test_start_time)/1000)))
+          .replace('Payment     :                                                          ',
+                    printf('Payment     : %10d %6.2f %10d %10d %6.2f %10d',
+                    xact_counts['Payment'],
+                    xact_percent['Payment'],
+                    xact_per_sec['Payment'],
+                    xact_per_min['Payment'],
+                    (xact_per_min['Payment']/total_xact_per_minute)*100,
+                    60 * xact_counts['Payment']/(Math.abs(now - t.test_start_time)/1000)))
+          .replace('Order Status:                                                          ',
+                    printf('Order Status: %10d %6.2f %10d %10d %6.2f %10d',
+                    xact_counts['Order Status'],
+                    xact_percent['Order Status'],
+                    xact_per_sec['Order Status'],
+                    xact_per_min['Order Status'],
+                    (xact_per_min['Order Status']/total_xact_per_minute)*100,
+                    60 * xact_counts['Order Status']/(Math.abs(now - t.test_start_time)/1000)))
+          .replace('Delivery    :                                                          ',
+                    printf('Delivery    : %10d %6.2f %10d %10d %6.2f %10d',
+                    xact_counts['Delivery'],
+                    xact_percent['Delivery'],
+                    xact_per_sec['Delivery'],
+                    xact_per_min['Delivery'],
+                    (xact_per_min['Delivery']/total_xact_per_minute)*100,
+                    60 * xact_counts['Delivery']/(Math.abs(now - t.test_start_time)/1000)))
+          .replace('Stock Level :                                                          ',
+                    printf('Stock Level : %10d %6.2f %10d %10d %6.2f %10d',
+                    xact_counts['Stock Level'],
+                    xact_percent['Stock Level'],
+                    xact_per_sec['Stock Level'],
+                    xact_per_min['Stock Level'],
+                    (xact_per_min['Stock Level']/total_xact_per_minute)*100,
+                    60 * xact_counts['Stock Level']/(Math.abs(now - t.test_start_time)/1000)))
+          .replace('Total       :                                                          ',
+                    printf('Total       : %10d %6.2f %10d %10d %6.2f %10d',
+                    total_xacts,
+                    100,
+                    (total_xacts - t.total_xacts_last)/seconds_since_last_call,
+                    (total_xacts - t.total_xacts_last)/seconds_since_last_call * 60,
+                    100,
+                    60 * total_xacts/(Math.abs(now - t.test_start_time)/1000)))
+          .replace('Time:                                        ', printf('Time: %s', now))
+          ;
+
+    t.xact_counts_last['New Order']    = xact_counts['New Order']    ;
+    t.xact_counts_last['Payment']      = xact_counts['Payment']      ;
+    t.xact_counts_last['Order Status'] = xact_counts['Order Status'] ;
+    t.xact_counts_last['Delivery']     = xact_counts['Delivery']     ;
+    t.xact_counts_last['Stock Level']  = xact_counts['Stock Level']  ;
+
+    t.total_xacts_last = total_xacts;
+    t.stats_calc_time_last = now;
+
+    return out;
+  }
 }
 
 class Terminal  {
 
   public w_id: number;
+  db: TPCCDatabase;
   display: any;
 
   menuProfile: MenuProfile;
@@ -140,9 +154,10 @@ class Terminal  {
    * w_id: Warehouse ID, as stored in database. We use a string type because the
    * TPC-C specification allows this to be any data type.
    */
-  constructor(w_id: number, display: any) {
+  constructor(w_id: number, db: TPCCDatabase, display: any) {
 
     this.w_id = w_id;
+    this.db = db;
     this.display = display;
 
     this.menuProfile        = new MenuProfile(this);
@@ -237,15 +252,13 @@ interface TransactionProfile {
   /* Prepare fresh input */
   prepareInput();
 
-  /* Execute the transaction */
-  execute();
-
-  /*
-   * execute() function should register this function as the even-handler for
-   * when the transaction response is received. This function then in turn
+  /* Execute the transaction
+   *
+   * execute() function should register a function as the event-handler for
+   * when the transaction response is received. That function then in turn
    * should call the terminal's showMenu() after think-time.
    */
-  receiveTransactionResponse();
+  execute();
 }
 
 /*
@@ -277,35 +290,16 @@ class MenuProfile implements TransactionProfile {
   /* Do-nothing functions */
   prepareInput(){}
   execute(){}
-  receiveTransactionResponse(){}
-}
-
-class OrderLineItem {
-  constructor(public i_id: number, public i_name: string,
-              public supply_w_id: number, public quantity: number,
-              public s_quantity: number, public branded_generic: string,
-              public i_price: number, public amount: number) {
-  }
 }
 
 class NewOrderProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
-  w_tax: number;
-  d_id: number;
-  d_tax: number;
-  c_id: number;
-  c_name: string;
-  c_credit: string;
-  c_discount: number;
-  o_id: number;
-  o_entry_d: Date;
-  o_ol_cnt: number;
-  ol_items: OrderLineItem[];
-  total: number;
+  order: NewOrder;
 
   constructor(term: Terminal) {
     this.term = term;
+    this.order = new NewOrder();
   }
 
   getKeyingTime() {
@@ -321,54 +315,53 @@ class NewOrderProfile implements TransactionProfile {
 
     var i: number;
 
-    this.w_tax = 0.10;
-    this.d_id = 9;
-    this.d_tax = 0.15;
-    this.c_id = 99;
-    this.c_name = 'Singh';
-    this.c_credit = 'GC';
-    this.c_discount = 0.40;
-    this.o_id = 9999;
-    this.o_entry_d = new Date();
-    this.o_ol_cnt = 12;
+    var order = this.order;
 
-    this.ol_items = [];
+    order.w_id        = this.term.w_id;
+    order.d_id        = 9;
+    order.c_id        = 99;
+
+    order.order_lines = [];
 
     for (i = 0; i < 15; ++i) {
-      this.ol_items[i] = new OrderLineItem(i*1000, 'ITEM' + i, this.term.w_id,
-                                            15-i, 9999, 'G', 200, 200*(15-i));
+      order.order_lines[i] = new OrderLine(i*1000, this.term.w_id, 15-i, 200, 'ITEM' + i, 'G', 9999, 'G', 200);
     }
 
-    this.total = 0;
+    /* Output values; just clearing them here to avoid errors originating from undefined/null */
+    order.o_id        = 0;
+    order.o_entry_d   = new Date(0);
+    order.w_tax       = 0;
+    order.d_tax       = 0;
+    order.d_next_oid  = 0;
+    order.c_last      = '';
+    order.c_credit    = '';
+    order.c_discount  = 0;
+    order.o_ol_cnt    = 0;
+    order.total_amount= 0;
+    order.status      = 'In Progress';  /* Label it as in-progress, for display purposes */
   }
 
   execute(){
 
     var self = this;
 
-    /* Do-nothing transaction */
-
-    /* Simulate a transaction that takes 1 second */
-    setTimeout(function(){
-      self.receiveTransactionResponse();
-      }, nullDBResponseTime);
-  }
-
-  receiveTransactionResponse(){
-
-    var self = this;
-
-    ++xact_counts['New Order'];
-
-    /*Simulate that the completed transaction provided the order's total amount */
-    self.total = 900;
-
     self.term.refreshDisplay();
 
-    setTimeout(function(){
-        self.term.showMenu();
-      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+    self.term.db.doNewOrderTransaction(self.order, function(status: string, order: NewOrder) {
+
+      self.order = order;
+
+      ++xact_counts['New Order'];
+
+      self.term.refreshDisplay();
+
+      setTimeout(function(){
+          self.term.showMenu();
+        }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+    }
+    );
   }
+
 
   /*
    * Although I tried very hard, this screen layout may not agree with the
@@ -379,33 +372,34 @@ class NewOrderProfile implements TransactionProfile {
   getScreen(): string {
 
     var i: number;
+    var order: NewOrder = this.order;
 
     var out:string = newOrderScreen
-                      .replace('Warehouse:     '        , printf('Warehouse: %4d', this.term.w_id))
-                      .replace('Customer:     '         , printf('Customer: %4d', this.c_id))
-                      .replace('Order Number:         ' , printf('Order Number: %8d', this.c_id))
-                      .replace('District:   '           , printf('District: %2d', this.d_id))
-                      .replace('Name:                 ' , printf('Name: %-16s', this.c_name))
-                      .replace('Number of Lines:   '    , printf('Number of Lines: %2d', this.o_ol_cnt))
-                      .replace('Credit:   '             , printf('Credit: %2s', this.c_credit, 2))
-                      .replace('Discount:       '       , printf('Discount: %.4f', this.c_discount))
-                      .replace('WTax:       '           , printf('WTax: %.4f', this.w_tax))
-                      .replace('DTax:       '           , printf('DTax: %.4f', this.d_tax))
-                      .replace('Order Date:           ' , printf('Order Date: %10s', this.o_entry_d.getFullYear() + '/' + this.o_entry_d.getMonth() + '/' + this.o_entry_d.getDay()))
-                      .replace('Total:       '          , printf('Total: %6.2f', this.total))
+                      .replace('Warehouse:     '        , printf('Warehouse: %4d'      , order.w_id))
+                      .replace('Customer:     '         , printf('Customer: %4d'       , order.c_id))
+                      .replace('Order Number:         ' , printf('Order Number: %8d'   , order.o_id))
+                      .replace('District:   '           , printf('District: %2d'       , order.d_id))
+                      .replace('Name:                 ' , printf('Name: %-16s'         , order.c_last))
+                      .replace('Number of Lines:   '    , printf('Number of Lines: %2d', order.o_ol_cnt))
+                      .replace('Credit:   '             , printf('Credit: %2s'         , order.c_credit, 2))
+                      .replace('Discount:       '       , printf('Discount: %.4f'      , order.c_discount))
+                      .replace('WTax:       '           , printf('WTax: %.4f'          , order.w_tax))
+                      .replace('DTax:       '           , printf('DTax: %.4f'          , order.d_tax))
+                      .replace('Order Date:           ' , printf('Order Date: %10s'    , order.o_entry_d.getFullYear() + '/' + order.o_entry_d.getMonth() + '/' + order.o_entry_d.getDay()))
+                      .replace('Total:       '          , printf('Total: %6.2f'        , order.total_amount))
                       ;
 
     for (i = 0; i < 15; ++i) {
       out = out.replace(' ' + (i+11).toString() + '                                                                             ',
                          printf(' %6d %7d %-24s %3d %9d %2s %5.2f %6.2d         ',
-                                this.ol_items[i].supply_w_id,
-                                this.ol_items[i].i_id,
-                                this.ol_items[i].i_name,
-                                this.ol_items[i].quantity,
-                                this.ol_items[i].s_quantity,
-                                this.ol_items[i].branded_generic,
-                                this.ol_items[i].i_price,
-                                this.ol_items[i].amount));
+                                order.order_lines[i].ol_supply_w_id,
+                                order.order_lines[i].ol_i_id,
+                                order.order_lines[i].i_name,
+                                order.order_lines[i].ol_quantity,
+                                order.order_lines[i].s_quantity,
+                                order.order_lines[i].brand_generic,
+                                order.order_lines[i].i_price,
+                                order.order_lines[i].ol_amount));
     }
 
     return out;
