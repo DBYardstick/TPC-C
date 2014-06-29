@@ -21,7 +21,7 @@ class NewOrder {
   w_id          : number;      /* Input */
   d_id          : number;      /* Input */
   c_id          : number;      /* Input */
-  order_lines   : OrderLine[]; /* Input */
+  order_lines   : OrderLine[]; /* Input */  /* if order_lines[n].ol_i_id === -1, then the order-line should be ignored */
   o_id          : number;      /* Output */
   o_entry_d     : Date;        /* Output */
   w_tax         : number;      /* Output */
@@ -32,6 +32,14 @@ class NewOrder {
   c_discount    : number;      /* Output */
   o_ol_cnt      : number;      /* Output */
   total_amount  : number;      /* Output */
-  status        : string;      /* Output */ /* 'Success' or 'Item number is not valid' */
 
+  constructor() {
+
+    this.order_lines = [];
+
+    var i;
+      for (i = 0; i < 15; ++i) {
+        this.order_lines[i] = new OrderLine(0, 0, 0, 0, '', '', 0, '', 0);
+      }
+  }
 }

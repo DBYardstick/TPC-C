@@ -1,7 +1,24 @@
 
 var printf = require('printf');
 
-var nullDBResponseTime = 0*1000; /* in milliseconds; Response time of the database that doesn't do anything */
+var g_num_warehouses: number = 0;
+var g_terminals: Terminal[] = [];
+var nullDBResponseTime: number = 0*1000; /* in milliseconds; Response time of the database that doesn't do anything */
+
+function getRand(min: number, max: number) {
+  return min + Math.floor(Math.random() * (max-min+1));
+}
+
+function NURand(A: number, x: number, y: number) {
+
+  /*
+   * TODO: Implement Clause 2.1.6.1. Get the C-Load value from the database and
+   * calculate C-Run accourding to the above mentioned clause.
+   *
+   * For now, we use a constant pulled out of thin air.
+   */
+  return (((getRand(0, A) | getRand(x, y)) + 134 /* => C */) % (y - x + 1)) + x;
+}
 
 var xact_counts: {[transaction: string] : number} = {};
 xact_counts['New Order']    = 0;
@@ -119,7 +136,9 @@ class TPCCStats {
                     (total_xacts - t.total_xacts_last)/seconds_since_last_call * 60,
                     100,
                     60 * total_xacts/(Math.abs(now - t.test_start_time)/1000)))
-          .replace('Time:                                        ', printf('Time: %s', now))
+          .replace('Database:                ', printf('Database: %-15s', g_terminals[0].db.getName()))
+          .replace('Duration:      ', printf('Duration: %.5d', Math.abs(now - t.test_start_time)/1000))
+          .replace('Warehouses:        ', printf('Warehouses: %.7d', g_num_warehouses))
           ;
 
     t.xact_counts_last['New Order']    = xact_counts['New Order']    ;
@@ -134,6 +153,8 @@ class TPCCStats {
     return out;
   }
 }
+
+var menuThinkTime: number = 1000;
 
 class Terminal  {
 
@@ -193,8 +214,8 @@ class Terminal  {
      * (a) reduce CPU consumption/increase generated load, or (b) to comply with
      * specification's word, upon insistence by the auditor.
      */
-     //setTimeout(function(){self.chooseTransaction();}, 1000);
-     self.chooseTransaction();
+     setTimeout(function(){self.chooseTransaction();}, menuThinkTime);
+     //self.chooseTransaction();
   }
 
   chooseTransaction() {
@@ -223,6 +244,7 @@ class Terminal  {
 
     /* Execute the transaction after the keying time. */
     setTimeout(function(){
+
         self.currentProfile.execute();
       }, self.currentProfile.getKeyingTime());
   }
@@ -296,10 +318,13 @@ class NewOrderProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
   order: NewOrder;
+  status: string;
 
   constructor(term: Terminal) {
     this.term = term;
     this.order = new NewOrder();
+
+    this.status = '';
   }
 
   getKeyingTime() {
@@ -313,21 +338,68 @@ class NewOrderProfile implements TransactionProfile {
 
   prepareInput() {
 
-    var i: number;
+    this.status = '';  /* Clear the status message from the previous run. */
 
     var order = this.order;
 
     order.w_id        = this.term.w_id;
-    order.d_id        = 9;
-    order.c_id        = 99;
+    order.d_id        = getRand(1, 10);
+    order.c_id        = NURand(1023, 1, 3000);
 
-    order.order_lines = [];
+    /* This number should NOT be communicated to the SUT */
+    var ol_count:number = getRand(5, 15);
+    var rbk: number = getRand(0, 100);
+    var i: number;
 
     for (i = 0; i < 15; ++i) {
-      order.order_lines[i] = new OrderLine(i*1000, this.term.w_id, 15-i, 200, 'ITEM' + i, 'G', 9999, 'G', 200);
+
+      if (i >= ol_count) {
+        order.order_lines[i].ol_i_id = -1;
+        continue;
+      }
+
+      var item_id = ((i === ol_count -1 && rbk === 1) ? 200000 : NURand(8191, 1, 100000));
+      var use_w_id: number;
+
+      /*
+       * Clause 2.4.1.5.2. If there are more than 1 active warehouses, then
+       * 1% of the time choose a remote warehouse for an item.
+       */
+      if (g_num_warehouses === 1) {
+
+        use_w_id = this.term.w_id;
+
+      } else {
+        var use_remote_warehouse: boolean = (getRand(0, 100) === 1);
+
+        if (use_remote_warehouse === true) {
+          do {
+
+            use_w_id = getRand(1, g_num_warehouses);
+
+          } while(use_w_id === this.term.w_id);
+
+        } else {
+
+          use_w_id = this.term.w_id;
+
+        }
+      }
+
+      order.order_lines[i].ol_i_id        = item_id;
+      order.order_lines[i].ol_supply_w_id = use_w_id;
+      order.order_lines[i].ol_quantity    = getRand(1, 10);
+
+      /* Rest of these are output feild, expected to be filled in by the SUT */
+      order.order_lines[i].i_price        = 0;
+      order.order_lines[i].i_name         = '';
+      order.order_lines[i].i_data         = '';
+      order.order_lines[i].s_quantity     = 0;
+      order.order_lines[i].brand_generic  = '';
+      order.order_lines[i].ol_amount      = 0;
     }
 
-    /* Output values; just clearing them here to avoid errors originating from undefined/null */
+    /* Output values; just clearing these here to avoid errors originating from undefined/null */
     order.o_id        = 0;
     order.o_entry_d   = new Date(0);
     order.w_tax       = 0;
@@ -338,7 +410,6 @@ class NewOrderProfile implements TransactionProfile {
     order.c_discount  = 0;
     order.o_ol_cnt    = 0;
     order.total_amount= 0;
-    order.status      = 'In Progress';  /* Label it as in-progress, for display purposes */
   }
 
   execute(){
@@ -349,6 +420,8 @@ class NewOrderProfile implements TransactionProfile {
 
     self.term.db.doNewOrderTransaction(self.order, function(status: string, order: NewOrder) {
 
+      self.status = status;
+
       self.order = order;
 
       ++xact_counts['New Order'];
@@ -357,11 +430,10 @@ class NewOrderProfile implements TransactionProfile {
 
       setTimeout(function(){
           self.term.showMenu();
-        }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
-    }
+        }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
+      }
     );
   }
-
 
   /*
    * Although I tried very hard, this screen layout may not agree with the
@@ -375,23 +447,26 @@ class NewOrderProfile implements TransactionProfile {
     var order: NewOrder = this.order;
 
     var out:string = newOrderScreen
-                      .replace('Warehouse:     '        , printf('Warehouse: %4d'      , order.w_id))
-                      .replace('Customer:     '         , printf('Customer: %4d'       , order.c_id))
-                      .replace('Order Number:         ' , printf('Order Number: %8d'   , order.o_id))
-                      .replace('District:   '           , printf('District: %2d'       , order.d_id))
-                      .replace('Name:                 ' , printf('Name: %-16s'         , order.c_last))
-                      .replace('Number of Lines:   '    , printf('Number of Lines: %2d', order.o_ol_cnt))
-                      .replace('Credit:   '             , printf('Credit: %2s'         , order.c_credit, 2))
-                      .replace('Discount:       '       , printf('Discount: %.4f'      , order.c_discount))
-                      .replace('WTax:       '           , printf('WTax: %.4f'          , order.w_tax))
-                      .replace('DTax:       '           , printf('DTax: %.4f'          , order.d_tax))
-                      .replace('Order Date:           ' , printf('Order Date: %10s'    , order.o_entry_d.getFullYear() + '/' + order.o_entry_d.getMonth() + '/' + order.o_entry_d.getDay()))
-                      .replace('Total:       '          , printf('Total: %6.2f'        , order.total_amount))
+                      .replace('Warehouse:     '          , printf('Warehouse: %4d'      , order.w_id))
+                      .replace('Customer:     '           , printf('Customer: %4d'       , order.c_id))
+                      .replace('Order Number:         '   , printf('Order Number: %8d'   , order.o_id))
+                      .replace('District:   '             , printf('District: %2d'       , order.d_id))
+                      .replace('Name:                 '   , printf('Name: %-16s'         , order.c_last))
+                      .replace('Number of Lines:   '      , printf('Number of Lines: %2d', order.o_ol_cnt))
+                      .replace('Credit:   '               , printf('Credit: %2s'         , order.c_credit, 2))
+                      .replace('Discount:       '         , printf('Discount: %.4f'      , order.c_discount))
+                      .replace('WTax:       '             , printf('WTax: %.4f'          , order.w_tax))
+                      .replace('DTax:       '             , printf('DTax: %.4f'          , order.d_tax))
+                      .replace('Order Date:           '   , printf('Order Date: %10s'    , order.o_entry_d.getFullYear() + '/' + order.o_entry_d.getMonth() + '/' + order.o_entry_d.getDay()))
+                      .replace('Total:       '            , printf('Total: %6.2f'        , order.total_amount))
+                      .replace('Item number is not valid' , printf('%-24s'               , this.status))
                       ;
 
     for (i = 0; i < 15; ++i) {
       out = out.replace(' ' + (i+11).toString() + '                                                                             ',
-                         printf(' %6d %7d %-24s %3d %9d %2s %5.2f %6.2d         ',
+                         order.order_lines[i].ol_i_id === -1
+                         ? '                                                                                '
+                         : printf(' %6d %7d %-24s %3d %9d %2s %5.2f   %6.2d        ',
                                 order.order_lines[i].ol_supply_w_id,
                                 order.order_lines[i].ol_i_id,
                                 order.order_lines[i].i_name,
@@ -455,7 +530,7 @@ class PaymentProfile implements TransactionProfile {
 
     setTimeout(function(){
         self.term.showMenu();
-      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
   }
 
   getScreen(): string {
@@ -512,7 +587,7 @@ class OrderStatusProfile implements TransactionProfile {
 
     setTimeout(function(){
         self.term.showMenu();
-      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
   }
 
   getScreen(): string {
@@ -569,7 +644,7 @@ class DeliveryProfile implements TransactionProfile {
 
     setTimeout(function(){
         self.term.showMenu();
-      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
   }
 
   getScreen(): string {
@@ -626,7 +701,7 @@ class StockLevelProfile implements TransactionProfile {
 
     setTimeout(function(){
         self.term.showMenu();
-      }, self.getThinkTime() - 1000);  /* See note above call of Terminal.chooseTransaction() */
+      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
   }
 
   getScreen(): string {
@@ -690,7 +765,7 @@ var newOrderScreen: string =
 /*20*/+"| 23                                                                             |\n"
 /*21*/+"| 24                                                                             |\n"
 /*22*/+"| 25                                                                             |\n"
-/*23*/+"| ItemNotFoundMessage                                                            |\n"
+/*23*/+"| Item number is not valid                                                       |\n"
 /*24*/+"|________________________________________________________________________________|\n"
 ;
 
@@ -806,17 +881,11 @@ var stockLevelScreen: string =
 /*24*/+"|________________________________________________________________________________|\n"
 ;
 
-xact_counts["New Order"] = 0;
-xact_counts["Payment"] = 0;
-xact_counts["Order Status"] = 0;
-xact_counts["Delivery"] = 0;
-xact_counts["Stock Level"] = 0;
-
 var adminScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
 /*02*/+"|                               TPC-C Admin                                      |\n"
-/*03*/+"| Time:                                                                          |\n"
+/*03*/+"| Database:                 Duration:       Warehouses:                          |\n"
 /*04*/+"|                    Total  %/Tot         /s       /min  %/min    avg/min        |\n"
 /*05*/+"| New Order   :                                                                  |\n"
 /*06*/+"| Payment     :                                                                  |\n"

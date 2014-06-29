@@ -93,17 +93,30 @@ mainBox.focus();
 
 mainScreen.render();
 
-var i: number;
-var j: number;
-var num_warehouses: number = 1000;
-var terminals: Terminal[] = [];
+function increase_warehouse_count(count: number) {
+  var i: number;
+  var j: number;
 
-for (i = 1; i <= num_warehouses; ++i) {
-  for (j = 1; j <= 10; ++j) {
-    terminals[(i-1)*10 + (j-1)] = new Terminal(i, new NullDB(), (i === 1 && j === 1) ? mainBox : null);
+  for (i = g_num_warehouses;
+        i < (g_num_warehouses + count);
+        ++i) {
+
+    for (j = 0; j < 10; ++j) {
+                                          /* Warehouse IDs are 1 based */
+      g_terminals[i*10 + j] = new Terminal(i+1, new NullDB(), (i === 0 && j === 0) ? mainBox : null);
+    }
   }
+
+  g_num_warehouses += count;
 }
 
+function decrease_warehouse_count(count: number) {
+    /* TODO */
+}
+
+increase_warehouse_count(1000);
+
+/* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {
   var stats: TPCCStats = new TPCCStats();
 
