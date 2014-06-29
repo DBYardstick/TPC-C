@@ -303,16 +303,13 @@ begin
 end;
 $$ language plpgsql;
 
-create or replace function add_warehouses(num_warehouses integer default 1) returns setof integer as $$
+create or replace function add_warehouses(start_id integer default 1, num_warehouses integer default 1) returns setof integer as $$
 begin
 	return query
 	with
-	c_load as (	/* Definition of C-Load; see Clause 2.1.6.1 */
-		select floor(random() * (255+1))::integer as c),
-
-	current_wh_count(n) as (
-		select count(*) as n
-		from WAREHOUSE),
+	constants as (	/* Definition of C-Load; see Clause 2.1.6.1 */
+		select floor(random() * (255+1))::integer as c_load,
+		coalesce(start_id, (select count(*)+1 from WAREHOUSE)) as start_wh_id),
 
 	warehouses_inserted(w_id) as (
 		insert into WAREHOUSE
@@ -325,8 +322,8 @@ begin
 					random_n_string(4, 4) || '11111'	as W_ZIP,
 					random() * 0.2						as W_TAX,
 					300000								as W_YTD
-			from generate_series((select n from current_wh_count)+1,
-									(select n from current_wh_count)+num_warehouses) as s
+			from generate_series((select start_wh_id from constants),
+									(select start_wh_id from constants) + num_warehouses - 1) as s
 			returning W_ID),
 
 	stocks_inserted as (
@@ -384,7 +381,7 @@ begin
 							generate_c_last(s)
 						else
 							generate_c_last(NURand(255, 0, 999,
-									(select c from c_load)))
+									(select c_load from constants)))
 						end 								as C_LAST,
 						random_a_string(10, 20)				as C_STREET_1,
 						random_a_string(10, 20)				as C_STREET_2,

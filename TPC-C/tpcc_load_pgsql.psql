@@ -8,9 +8,12 @@
 -- Stop script processing on an ERROR
 \set ON_ERROR_STOP 1
 
-\include_relative tpcc_ddl_drop_pgsql.sql
+-- Do NOT drop objects. Require the user to drop them explicitly.
+-- \include_relative tpcc_ddl_drop_pgsql.sql
+
+-- Create the objects.
 \include_relative tpcc_ddl_pgsql.sql
 
 select load_item();
-select add_warehouses(1);
+select add_warehouses(1, 1);
 select data_load_sanity_tests();
