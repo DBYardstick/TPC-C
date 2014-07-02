@@ -26,7 +26,7 @@ class NewOrder {
   o_entry_d     : Date;        /* Output */
   w_tax         : number;      /* Output */
   d_tax         : number;      /* Output */
-  d_next_oid    : number;      /* Output */
+  d_next_o_id   : number;      /* Output */
   c_last        : string;      /* Output */
   c_credit      : string;      /* Output */
   c_discount    : number;      /* Output */

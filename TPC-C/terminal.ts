@@ -404,7 +404,7 @@ class NewOrderProfile implements TransactionProfile {
     order.o_entry_d   = new Date(0);
     order.w_tax       = 0;
     order.d_tax       = 0;
-    order.d_next_oid  = 0;
+    order.d_next_o_id  = 0;
     order.c_last      = '';
     order.c_credit    = '';
     order.c_discount  = 0;

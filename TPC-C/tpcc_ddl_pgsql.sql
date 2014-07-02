@@ -54,7 +54,7 @@ create table DISTRICT (
 	D_ZIP		char(9),
 	D_TAX		numeric(4,4),
 	D_YTD		numeric(12,2),
-	D_NEXT_OID	integer,
+	D_NEXT_O_ID	integer,
 
 	primary key (D_W_ID, D_ID),
 	foreign key (D_W_ID) references WAREHOUSE(W_ID)
@@ -365,7 +365,7 @@ begin
 						random_n_string(4, 4) || '11111'	as D_ZIP,
 						random() * 0.2						as D_TAX,
 						30000								as D_YTD,
-						3001								as D_NEXT_OID
+						3001								as D_NEXT_O_ID
 				from generate_series(1, 10) as s
 					cross join warehouses_inserted as w
 				returning d_id, d_w_id),
@@ -489,6 +489,275 @@ begin
 	return;
 end;
 $$ language plpgsql;
+
+create type order_line_param as (
+	ol_i_id        integer,				/* Input */
+	ol_supply_w_id integer,				/* Input */
+	ol_quantity    integer,				/* Input */
+	i_price        double precision,	/* Output */
+	i_name         text,  				/* Output */
+	i_data         text,  				/* Output */
+	s_quantity     integer,				/* Output */
+	brand_generic  char(1),				/* Output */
+	ol_amount      double precision		/* Output */
+);
+
+create type new_order_param as (
+	w_id			integer,					/* Input */
+	d_id			integer,					/* Input */
+	c_id			integer,					/* Input */
+	order_lines		order_line_param[],			/* Input */
+	o_id			integer,					/* Output */
+	o_entry_d		timestamp with time zone,	/* Output */
+	w_tax			double precision,			/* Output */
+	d_tax			double precision,			/* Output */
+	d_next_o_id		integer,					/* Output */
+	c_last			text,						/* Output */
+	c_credit		char(2),					/* Output */
+	c_discount		double precision,			/* Output */
+	o_ol_cnt		integer,					/* Output */
+	total_amount	double precision			/* Output */
+);
+
+create or replace function throw_error(msg text) returns text as $$
+begin
+	raise exception '%', msg;
+end;
+$$ language plpgsql;
+
+create or replace function raise_notice(msg text) returns text as $$
+begin
+	raise notice '%', msg;
+	return msg;
+end;
+$$ language plpgsql;
+
+/*
+ * Function to process the 'New Order' transaction profile.
+ *
+ * Clause 2.3.1 explicitly allows the commands within a transaction to be
+ * performed in any order (with an exception described in Clause 2.4.2.3). So we
+ * can perform different parts of this function in different orders to reduce
+ * the amount of time these intra-transaction commands spend waiting for each
+ * other; at least one top TPC-C 'Full Disclosure Report' shows that other
+ * vendors leverage this flexibility.
+ *
+ * But I feel that since there can be only 10 terminals operating for a warehouse,
+ * and because of the transaction mix requirements, very few of those may be
+ * performing this transaction. So at this point I don't feel like exploiting
+ * the flexibility provided by this clause. We may want to do this at some later
+ * stage, though, and see if it helps improve the performance.
+ */
+create or replace function process_new_order(order_p new_order_param) returns new_order_param as $$
+	with
+		warehouse_selected as (
+			select W_TAX from WAREHOUSE where W_ID = order_p.w_id
+		),
+		district_updated(d_tax, generated_o_id, d_next_o_id) as (
+			update	DISTRICT
+			set		D_NEXT_O_ID = D_NEXT_O_ID + 1
+			where	D_W_ID = order_p.w_id
+			and		D_ID = order_p.d_id
+			returning
+					D_TAX, D_NEXT_O_ID - 1, D_NEXT_O_ID
+		),
+		customer_selected as (
+			select	C_DISCOUNT,
+					C_LAST,
+					C_CREDIT
+			from	CUSTOMER
+			where	C_W_ID	= order_p.w_id
+			and		C_D_ID	= order_p.d_id
+			and		C_ID	= order_p.c_id
+		),
+		order_lines_input as (
+			select * from unnest(order_p.order_lines) as ol
+		),
+		order_inserted as (
+			insert into ORDERS
+			values((select generated_o_id from district_updated),-- as O_ID
+					order_p.d_id, -- as O_D_ID,
+					order_p.w_id, --  as O_W_ID,
+					order_p.c_id, --  as O_C_ID,
+					now(), --  as O_ENTRY_D,	/* If this value is changed, change the value in new_order_param costructor below as well */
+					null, --  as O_CARRIER_ID,
+					(select count(*) from order_lines_input), --  as O_OL_CNT,
+					(select	(count(*) = 0)::integer::numeric
+						from	order_lines_input
+						where	ol_supply_w_id <> order_p.w_id) --  as O_ALL_LOCAL
+				)
+		),
+		new_order_inserted as (
+			insert into NEW_ORDER
+			values((select generated_o_id from district_updated), --  as NO_O_ID,
+					order_p.d_id, --  as NO_D_ID,
+					order_p.w_id --  as NO_W_ID
+				)
+		),
+		order_lines_valid as (
+			select * from order_lines_input where ol_i_id between 1 and 100000
+		),
+		order_lines_invalid as (
+			/*
+			* An invalid item is the one that's not in the ITEM table. A simple
+			* ID range check is sufficient; TPC-C specification doesn't say
+			* how to check this, so this seems compliant with the specification.
+			*/
+			select * from order_lines_input where ol_i_id not between 1 and 100000
+		),
+		order_lines_computed as (
+			update STOCK as s
+				set	S_QUANTITY =	case
+									when s.S_QUANTITY >= v.ol_quantity + 10 then
+										s.S_QUANTITY - v.ol_quantity
+									else
+										s.S_QUANTITY - v.ol_quantity + 91
+									end,
+					S_YTD = S_YTD + v.ol_quantity,
+					S_ORDER_CNT = S_ORDER_CNT + 1,
+					S_REMOTE_CNT = S_REMOTE_CNT + (v.ol_supply_w_id != order_p.w_id)::integer
+
+			from	order_lines_valid as v,
+					ITEM as i
+			where	s.S_I_ID	= v.ol_i_id
+				and	s.S_W_ID	= v.ol_supply_w_id
+				and	i.I_ID		= v.ol_i_id
+			returning
+					v.ol_i_id,
+					v.ol_supply_w_id,
+					v.ol_quantity,
+					i.I_PRICE,
+					i.I_NAME,
+					i.I_DATA,
+					s.S_QUANTITY as s_quantity,
+					case
+					when i.I_DATA like '%ORIGINAL%' and s.S_DATA like '%ORIGINAL%' then
+						'B'
+					else
+						'G'
+					end as brand_generic,
+					v.ol_quantity * i.I_PRICE as ol_amount,
+					case
+					when v.ol_i_id = 1 then
+						S_DIST_01
+					when v.ol_i_id = 2 then
+						S_DIST_02
+					when v.ol_i_id = 3 then
+						S_DIST_03
+					when v.ol_i_id = 4 then
+						S_DIST_04
+					when v.ol_i_id = 5 then
+						S_DIST_05
+					when v.ol_i_id = 6 then
+						S_DIST_06
+					when v.ol_i_id = 7 then
+						S_DIST_07
+					when v.ol_i_id = 8 then
+						S_DIST_08
+					when v.ol_i_id = 9 then
+						S_DIST_09
+					when v.ol_i_id = 10 then
+						S_DIST_10
+					end as s_dist_xx
+		),
+		order_line_inserted as (
+			insert into ORDER_LINE
+				(select	(select generated_o_id from district_updated) as OL_O_ID,
+						order_p.d_id			as OL_D_ID,
+						order_p.w_id			as OL_W_ID,
+						row_number() over ()	as OL_NUMBER,
+						ol_i_id					as OL_I_ID,
+						ol_supply_w_id			as OL_SUPPLY_W_ID,
+						null					as OL_DELIVERY_D,
+						ol_quantity				as OL_QUANTITY,
+						ol_amount				as OL_AMOUNT,
+						s_dist_xx				as OL_DIST_INFO
+				from	order_lines_computed as c)
+				returning
+						ol_amount
+		),
+		order_lines_rejected as (
+			/* Per the specification, all the other operations of a New Order
+			* transaction should precede this error-rasing operation. So, to
+			* guarantee that, we include some irrelevant piece of information
+			* generated from last successful operation into this CTE.
+			*
+			* Generated 'Order ID' needs to be reported back to the client, per
+			* the specification. The 'irrelevant' data mentioned above is the
+			* 'Successful item count:' below.
+			*/
+			select throw_error('Item number is not valid. Order id: '
+						|| (select generated_o_id from district_updated)
+						|| ' Successful item count: '
+						|| (select count(*) from order_line_inserted)) from order_lines_invalid
+		)
+		-- , debug as (
+		-- 	select case raise_notice('order_lines_computed: ' || order_lines_computed::text) when 'null' then '1' else '2' end from order_lines_computed limit 1
+		-- )
+	select (
+		order_p.w_id,
+		order_p.d_id,
+		order_p.c_id,
+		(select array_agg((ol_i_id, ol_supply_w_id, ol_quantity, i_price, i_name, i_data, s_quantity, brand_generic, ol_amount)::order_line_param) from order_lines_computed),
+		(select generated_o_id from district_updated),
+		now(),	/* now() is stable within a transaction, so we don't need to get it from order_inserted */
+		(select w_tax from warehouse_selected),
+		(select d_tax from district_updated),
+		(select d_next_o_id from district_updated),
+		(select c_last from customer_selected),
+		(select c_credit from customer_selected),
+		(select c_discount from customer_selected),
+		(select count(*) from order_lines_input),
+		(select sum(ol_amount)
+				* (1-(select c_discount from customer_selected))
+				* (1 + (select w_tax from warehouse_selected)
+					+ (select d_tax from district_updated))
+				/* An expression to force the ERROR if an unused I_ID is provided */
+				+ (select count(*) from order_lines_rejected)
+			from order_line_inserted)
+		)::new_order_param;
+$$ language sql;
+
+/*
+
+Some examples of unit tests (needs at least 2 warehouses populated). Nood some polish before these can be actually used as unit test:
+
+postgres=# select process_new_order((1, 2, 3, '{"(-10,5,12,13,,,14,,15)","(4,10,6,7,,,,,)"}', 0, null, null, null, null, null, null, null, null, null)::new_order_param);
+ERROR:  Item number is not valid. Order id: 3036 Successful item count: 1
+CONTEXT:  SQL function "process_new_order" statement 1
+Time: 96.286 ms
+postgres=# select process_new_order((1, 2, 3, '{"(11,5,12,13,,,14,,15)","(4,10,6,7,,,,,)"}', 0, null, null, null, null, null, null, null, null, null)::new_order_param);
+                                                                                                                                             process_new_order
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1,2,3,"{""(11,5,12,4.75,i4elhuB8yTVq5nNPsA65c,kUmfUGXdLby2Gabf46F9utZX353f7icscyH6fFk1RT3x4fM8m,97,G,57)"",""(4,10,6,3.52,bbvFNaKWi1lUnojdaecXu4,4IDAcpLnUqa5b7ndtiBSBO2Q0Zk518L5QpG2OrqJSAP,43,G,21.12)""}",3036,"2014-07-01 15:41:02.541777-04",0.0472,0.1941,3037,BARBARPRI,GC,0.1501,2,82.4151055644)
+(1 row)
+
+Time: 16.131 ms
+postgres=# select process_new_order((1, 2, 3, '{"(11,5,12,13,,,14,,15)","(100001,10,6,7,,,,,)"}', 0, null, null, null, null, null, null, null, null, null)::new_order_param);
+ERROR:  Item number is not valid. Order id: 3037 Successful item count: 1
+CONTEXT:  SQL function "process_new_order" statement 1
+Time: 7.310 ms
+postgres=# select process_new_order((1, 2, 3, '{"(11,5,12,13,,,14,,15)","(100000,10,6,7,,,,,)"}', 0, null, null, null, null, null, null, null, null, null)::new_order_param);
+                                                                                                                                               process_new_order
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1,2,3,"{""(11,5,12,4.75,i4elhuB8yTVq5nNPsA65c,kUmfUGXdLby2Gabf46F9utZX353f7icscyH6fFk1RT3x4fM8m,85,G,57)"",""(100000,10,6,31.96,uEb4jLP5hKlH8mLf,TORIGINALiL6MphQJ3GOlqa2zxOOQTBJQhYLNe5EwQLig,58,G,191.76)""}",3037,"2014-07-01 15:41:22.957463-04",0.0472,0.1941,3038,BARBARPRI,GC,0.1501,2,262.4370412212)
+(1 row)
+
+postgres=# select * from order_line where ol_o_id = 3037;
+ ol_o_id | ol_d_id | ol_w_id | ol_number | ol_i_id | ol_supply_w_id | ol_delivery_d | ol_quantity | ol_amount |       ol_dist_info
+---------+---------+---------+-----------+---------+----------------+---------------+-------------+-----------+--------------------------
+    3037 |       2 |       1 |         1 |      11 |              5 |               |          12 |    957.12 | 1UBv5me2KGYyeM4BU84DGPaR
+    3037 |       2 |       1 |         2 |  100000 |             10 |               |           6 |     21.12 | 60sCcOJUQy71t4wclE86fimL
+(2 rows)
+
+select process_new_order((1, 2, 3, '{"(4,5,6,7,,,,,)","(10,11,12,13,,,14,,15)"}', 0, null, null, null, null, null, null, null, null, null)::new_order_param);
+
+select	*
+from (select unnest( ((1, 2, 3, '{"(4,5,6,7,,,8,,9)","(10,11,12,13,,,14,,15)"}', 0, '2014/04/04 12:00:00', 0, 0, 0, '', '', 0, 0, 0)::new_order_param).order_lines) as a) as v
+where (a).ol_i_id = 4;
+
+
+*/
 
 /*
  * Function to perform sanity checks on the initial data loaded. The purpose of
