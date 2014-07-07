@@ -199,3 +199,15 @@ you deem fit.
 later to adopt GPLv2, if I later disagree with some of the attributes of GPLv3.
 Of course, the code that was previously distributed under GPLv3 will remain
 under GPLv3.
+
+7. Do not pass JSON formatted strings to and from the database
+
+	In Postgres, the `to_json()` and its counterpart `json_populate_record()` can
+be used to marshal and unmarshal the JSON data. So it is possible to send JSON
+strings to the database and make it send the result as JSON as well. That would
+simplify the TPC-C application-side logic a bit because the application is being
+developed in JavaScript here.
+
+But I chose to not use JSON for database communication purely for performance
+reasons. Making the database do something that can be done by the client would
+make database performance suffer.
