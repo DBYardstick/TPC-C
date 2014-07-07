@@ -48,6 +48,15 @@ class TPCCStats {
     t.total_xacts_last                 = 0;
   }
 
+  reset_globals() {
+    xact_counts['New Order']    = 0;
+    xact_counts['Payment']      = 0;
+    xact_counts['Order Status'] = 0;
+    xact_counts['Delivery']     = 0;
+    xact_counts['Stock Level']  = 0;
+    this.stats_calc_time_last      = new Date();
+  }
+
   getStats() {
     var t = this; /* Short name */
 
@@ -418,6 +427,12 @@ class NewOrderProfile implements TransactionProfile {
 
     self.term.refreshDisplay();
 
+    /*
+     * Note to DB driver developer: The 'self.order' object passed here is an IN-OUT
+     * object; that is, fill in all its relevant fields and hand it back to the
+     * callback as the second parameter. For unused order_lines array elements
+     * 'ol_i_id' is to -1.
+     */
     self.term.db.doNewOrderTransaction(self.order, function(status: string, order: NewOrder) {
 
       self.status = status;
@@ -457,8 +472,8 @@ class NewOrderProfile implements TransactionProfile {
                       .replace('Discount:       '         , printf('Discount: %.4f'      , order.c_discount))
                       .replace('WTax:       '             , printf('WTax: %.4f'          , order.w_tax))
                       .replace('DTax:       '             , printf('DTax: %.4f'          , order.d_tax))
-                      .replace('Order Date:           '   , printf('Order Date: %10s'    , order.o_entry_d.getFullYear() + '/' + order.o_entry_d.getMonth() + '/' + order.o_entry_d.getDay()))
-                      .replace('Total:       '            , printf('Total: %6.2f'        , order.total_amount))
+                      .replace('Order Date:           '   , printf('Order Date: %-10s'    , order.o_entry_d.getFullYear() + '/' + (order.o_entry_d.getMonth()+1) + '/' + order.o_entry_d.getDate()))
+                      .replace('Total:        '           , printf('Total: %7.2f'        , order.total_amount))
                       .replace('Item number is not valid' , printf('%-24s'               , this.status))
                       ;
 
@@ -745,9 +760,9 @@ var newOrderScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
 /*02*/+"|                                 New Order                                      |\n"
-/*03*/+"| Warehouse:      District:    WTax:        DTax:                                |\n"
-/*04*/+"| Customer:       Name:                   Credit:    Discount:                   |\n"
-/*05*/+"| Order Number:          Number of Lines:    Order Date:            Total:       |\n"
+/*03*/+"|Warehouse:      District:    WTax:        DTax:                                 |\n"
+/*04*/+"|Customer:       Name:                   Credit:    Discount:                    |\n"
+/*05*/+"|Order Number:          Number of Lines:    Order Date:            Total:        |\n"
 /*06*/+"|                                                                                |\n"
 /*07*/+"| Supp_W Item_Id Item_Name                Qty Stock_Qty BG Price   Amount        |\n"
 /*08*/+"| 11                                                                             |\n"

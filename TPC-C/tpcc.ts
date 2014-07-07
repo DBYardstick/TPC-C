@@ -125,5 +125,22 @@ increase_warehouse_count(1000);
     adminBox.setContent(stats.getStats());
 
     mainScreen.render();
-    }, 1*1000);
+  }, 1 * 1000);
+
+  /*
+   * For about first 18 seconds of the benchmark run, there are no 'New Order'
+   * transactions completed, because of the keying time and think time
+   * requirements. This causes the calculated percentage of New Order
+   * transactions to show lower than actual for first few minutes.
+   *
+   * TODO: Research a way to calculate this percentage so that it reflects the
+   * reality; New Order transactions being approximately 45% of total.
+   *
+   * The method below seems to be a poor fix, because the percentages even after
+   * a stats-reset is quite skewed. So it is commented for now.
+   *
+   * Reset globals after a few seconds so that 'New Order' transaction counts
+   * are not skewed.
+   */
+  // setTimeout(function(){stats.reset_globals()}, 45 * 1000);
 })();

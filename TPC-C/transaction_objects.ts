@@ -21,7 +21,7 @@ class NewOrder {
   w_id          : number;      /* Input */
   d_id          : number;      /* Input */
   c_id          : number;      /* Input */
-  order_lines   : OrderLine[]; /* Input */  /* if order_lines[n].ol_i_id === -1, then the order-line should be ignored */
+  order_lines   : OrderLine[]; /* In/Out */  /* if order_lines[n].ol_i_id === -1, then that and the following order-line items should be ignored */
   o_id          : number;      /* Output */
   o_entry_d     : Date;        /* Output */
   w_tax         : number;      /* Output */
