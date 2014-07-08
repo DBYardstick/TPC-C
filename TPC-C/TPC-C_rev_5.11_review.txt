@@ -7,7 +7,7 @@ variations and options allowed by the TPC-C benchmark specification.
 
 SUT: System Under Run.
 
-TPC-C Aplication: The application that performs transactions in conformance with
+TPC-C Application: The application that performs transactions in conformance with
 					the TPC-C Spec; eg. our application.
 
 RT: Response Time
