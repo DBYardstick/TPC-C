@@ -5,6 +5,7 @@ var g_num_warehouses: number = 0;
 var g_terminals: Terminal[] = [];
 var nullDBResponseTime: number = 0*1000; /* in milliseconds; Response time of the database that doesn't do anything */
 
+/* Return an integer in the inclusive range [min, max] */
 function getRand(min: number, max: number) {
   return min + Math.floor(Math.random() * (max-min+1));
 }
@@ -367,7 +368,50 @@ class NewOrderProfile implements TransactionProfile {
         continue;
       }
 
+      /*
+       * Clause 2.4.1.5.1: If this is the last item on order and 'rollback' is
+       * true, then use an unused item number.
+       */
       var item_id = ((i === ol_count -1 && rbk === 1) ? 200000 : NURand(8191, 1, 100000));
+      /*
+       * Due to the random nature of the item-id generator, we may generate more
+       * than one order-line for the same item. At least Postgres does not do
+       * the right thing when the same row is updated multiiple times in the
+       * same UPDATE command. See example in [1]. Postgres demonstarates problem
+       * because I use a single UPDATE statement to process the complete order,
+       * and the multiple updates of the same {s_i_id, s_w_id} row in STOCK
+       * table see only one version of the row, the one as seen before the UPDATE
+       * command started.
+       *
+       * I suspect any other database that has built-in protection against the
+       * Halloween Problem would have the same trouble as well, unless the
+       * order-processing is performed using a multi-command transaction.
+       *
+       * [1]: https://gist.github.com/gurjeet/d0daf64fed2c4a111aed
+       *
+       * So, if the same item is being requested again, discard it and repeat
+       * the process to generate a new item id.
+       *
+       * TODO: Clause 2.4.1.5.1 does not mention anything about avoiding
+       * duplicate items in an order. See if the TPC people/auditor agree with
+       * the implementation here.
+       */
+      var dup_finder_counter: number;
+
+      for (dup_finder_counter = 0; dup_finder_counter < i; ++dup_finder_counter) {
+
+        if (order.order_lines[dup_finder_counter].ol_i_id === item_id) {
+
+          var anti_duplicate: number;
+          do {
+            anti_duplicate = NURand(8191, 1, 100000);
+          } while (anti_duplicate === item_id);
+
+          item_id = anti_duplicate;
+          break;
+        }
+      }
+
       var use_w_id: number;
 
       /*
@@ -386,6 +430,7 @@ class NewOrderProfile implements TransactionProfile {
 
             use_w_id = getRand(1, g_num_warehouses);
 
+          /* Reject the chosen warehouse if it's the same as the terminal's warehouse */
           } while(use_w_id === this.term.w_id);
 
         } else {
@@ -452,7 +497,7 @@ class NewOrderProfile implements TransactionProfile {
 
   /*
    * Although I tried very hard, this screen layout may not agree with the
-   * layout describe in Clause 2.4.3.5. I primarily used the screenshot under
+   * layout described in Clause 2.4.3.5. I primarily used the screenshot under
    * Clause 2.4.3.1 as the guide. N.B: Clause 2.2.1.2's item 5 allows reordering
    * or repositioning of the fields.
    */
@@ -481,7 +526,7 @@ class NewOrderProfile implements TransactionProfile {
       out = out.replace(' ' + (i+11).toString() + '                                                                             ',
                          order.order_lines[i].ol_i_id === -1
                          ? '                                                                                '
-                         : printf(' %6d %7d %-24s %3d %9d %2s %5.2f   %6.2d        ',
+                         : printf(' %6d %7d %-24s %3d %9d %2s %6.2f   %6.2f       ',
                                 order.order_lines[i].ol_supply_w_id,
                                 order.order_lines[i].ol_i_id,
                                 order.order_lines[i].i_name,
@@ -764,7 +809,7 @@ var newOrderScreen: string =
 /*04*/+"|Customer:       Name:                   Credit:    Discount:                    |\n"
 /*05*/+"|Order Number:          Number of Lines:    Order Date:            Total:        |\n"
 /*06*/+"|                                                                                |\n"
-/*07*/+"| Supp_W Item_Id Item_Name                Qty Stock_Qty BG Price   Amount        |\n"
+/*07*/+"| Supp_W Item_Id Item_Name                Qty Stock_Qty BG  Price   Amount       |\n"
 /*08*/+"| 11                                                                             |\n"
 /*09*/+"| 12                                                                             |\n"
 /*10*/+"| 13                                                                             |\n"

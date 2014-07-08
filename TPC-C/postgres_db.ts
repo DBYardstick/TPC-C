@@ -84,25 +84,12 @@ class Postgres implements TPCCDatabase {
 						break;
 					}
 
-					try {
 					input.order_lines[item_counter].i_price        = output.order_lines[item_counter].i_price;
 					input.order_lines[item_counter].i_name         = output.order_lines[item_counter].i_name;
 					input.order_lines[item_counter].i_data         = output.order_lines[item_counter].i_data;
 					input.order_lines[item_counter].s_quantity     = output.order_lines[item_counter].s_quantity;
 					input.order_lines[item_counter].brand_generic  = output.order_lines[item_counter].brand_generic;
 					input.order_lines[item_counter].ol_amount      = output.order_lines[item_counter].ol_amount;
-					} catch (err) {
-					/*
-					 * TODO: Remove this exception handling. This is put in place because
-					 * currently there seems to be a bug that sometimes causes the
-					 * output.order_lines[item_counter] yeilds null/undefined and
-					 * accessing any of its members causes the exception. So find/fix that
-					 * bug and remove this exception handling.
-					 */
-					logger.log('info', output.order_lines);
-					logger.log('info', input);
-					callback('Exception: ' + err, input);
-				}
 				}
 
 				input.o_id          = output.o_id;
