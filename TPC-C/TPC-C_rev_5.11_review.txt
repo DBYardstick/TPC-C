@@ -172,6 +172,16 @@ terminal.
 
 }}}
 
+2.4.3.4 Requires that for a rolled-back New Order transaction the following
+fields must be displayed: W_ID, D_ID, C_ID, C_LAST, C_CREDIT, O_ID. Note that
+it says the O_ID of rolled-back transaction be _displayed_, and it does *not*
+require that the same O_ID must not be used for a subsequent transaction (successful
+or not). This is important from implementation perspective since if it was
+required that the O_ID of a rolled-back transaction must not be reused, then
+we would have been forced to use a sequence object (or something similar) which
+does not show transactional behaviour, and hence when incremented once it would
+not lose the new state even if the transaction fails.
+
 ## TP Monitor (Transaction [Processing] Monitor)
 
 Clause 2.3.5 applies if some kind of connection pooler or transaction manager is
