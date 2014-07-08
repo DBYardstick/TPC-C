@@ -290,7 +290,7 @@ begin
 		select	s										as I_ID,
 				floor(random() * 10000)::integer + 1	as I_IM_ID,
 				random_a_string(14, 24)					as I_NAME,
-				1 + (random() * 100)					as I_PRICE,
+				1 + (random() * 99)						as I_PRICE,
 				case when random() < 0.10 then
 					(select overlay(str placing 'ORIGINAL' from 1 + floor(random() * (length(str)-8))::integer for 8)
 						from (select random_a_string(26, 50) as str, s as dummy) as v1 )
@@ -427,9 +427,12 @@ begin
 					cross join districts_inserted as d),
 
 		/*
-		 * This random permutation currently gets used in all districts' ORDERS
-		 * table. TODO: Consider a way to generate a different random
-		 * permutation for each district.
+		 * In a single execution of this function, this random permutation gets
+		 * used in all districts' ORDERS table. IOW, different runs of this
+		 * function *do* use different permutations.
+		 *
+		 * XXX: Consider a way to generate a different random permutation for
+		 * each district, within the same execution of this function.
 		 */
 		O_C_ID_permutation (p) as (
 			select array_agg(s)
@@ -831,6 +834,63 @@ begin
 	end;
 
 	return next 'Done';
+	return;
+end;
+$$ language plpgsql;
+
+create or replace function consistency_checks() returns setof text as $$
+begin
+
+	/* Clause 3.3.2.1 Consistency Check 1
+	 *
+	 * The result of this query should be 0.
+	 */
+
+	if ( 0 <> (select  sum((not ok)::int)
+				from    (select  W_ID, W_YTD = sum(D_YTD) as ok
+						from	WAREHOUSE
+						join	DISTRICT
+							on	D_W_ID = W_ID
+						group by W_ID) as v))
+	then
+		return next 'Consistency check 1 failed.';
+	end if;
+
+	/*
+	 * Clause 3.3.2.2 Consistency Check 2
+	 *
+	 * Results of both the following queries should be 0
+	 */
+
+	if ( 0 <> (select  sum((not ok)::int)
+				from	(select D_W_ID, D_ID, D_NEXT_O_ID - 1 = max(O_ID) as ok
+						from	DISTRICT
+						join	ORDERS
+							on	D_W_ID = O_W_ID
+							and	D_ID = O_D_ID
+						group by D_W_ID, D_ID) as v))
+	then
+		return next 'Consitency check 2 part 1 failed.';
+	end if;
+
+	if ( 0 <> (select  sum((not ok)::int)
+				from	(select D_W_ID, D_ID, D_NEXT_O_ID - 1 = max(NO_O_ID) as ok
+						from	DISTRICT
+						join	NEW_ORDER
+							on	D_W_ID = NO_W_ID
+							and	D_ID = NO_D_ID
+						group by D_W_ID, D_ID) as v))
+	then
+		return next 'Consitency check 2 part 2 failed.';
+	end if;
+
+	/*
+	 * TODO: Add all the checks here. Optionally, depending on a parameter,
+	 * perform only first 4 checks, because the rest of the checks may be time-
+	 * consuming, and because the Clause 3.3.2 allows it.
+	 */
+
+	return next 'All checks finished.'
 	return;
 end;
 $$ language plpgsql;
