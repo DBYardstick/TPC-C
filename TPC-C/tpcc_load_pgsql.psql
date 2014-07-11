@@ -18,3 +18,10 @@ select load_item();
 select add_warehouses(1, 1);
 select data_load_sanity_tests();
 select consistency_checks();
+vacuum analyze;
+
+/*
+ * TODO: Create a post-loading script which would be responsible for constraint
+ * creation and vacuuming etc. so that data loading would finish faster.
+ *
+ */

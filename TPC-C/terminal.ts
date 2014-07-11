@@ -21,6 +21,22 @@ function NURand(A: number, x: number, y: number) {
   return (((getRand(0, A) | getRand(x, y)) + 134 /* => C */) % (y - x + 1)) + x;
 }
 
+/*
+ * Function to generate C_LAST; see Clause 4.3.2.3
+ *
+ * If you feel a need to modify this, then also make sure the database-specific
+ * version of this function is also updated accordingly.
+ */
+function generate_c_last(num: number): string {
+  var arr: string[]	= ['BAR', 'OUGHT', 'ABLE', 'PRI', 'PRES', 'ESE', 'ANTI', 'CALLY', 'ATION', 'EING'];
+  var first:  number = Math.floor(num / 100);
+  var second: number = Math.floor((num % 100) / 10);
+  var third:  number = num % 10;
+
+  return arr[first] + arr[second] + arr[third];
+}
+
+
 var xact_counts: {[transaction: string] : number} = {};
 xact_counts['New Order']    = 0;
 xact_counts['Payment']      = 0;
@@ -148,7 +164,7 @@ class TPCCStats {
                     60 * total_xacts/(Math.abs(now - t.test_start_time)/1000)))
           .replace('Database:                ', printf('Database: %-15s', g_terminals[0].db.getName()))
           .replace('Duration:      ', printf('Duration: %.5d', Math.abs(now - t.test_start_time)/1000))
-          .replace('Warehouses:        ', printf('Warehouses: %.7d', g_num_warehouses))
+          .replace('Warehouses:        ', printf('Warehouses: %-7d', g_num_warehouses))
           ;
 
     t.xact_counts_last['New Order']    = xact_counts['New Order']    ;
@@ -171,6 +187,7 @@ class Terminal  {
   public w_id: number;
   db: TPCCDatabase;
   display: any;
+  logger: any;
 
   menuProfile: MenuProfile;
   newOrderProfile: NewOrderProfile;
@@ -185,15 +202,16 @@ class Terminal  {
    * w_id: Warehouse ID, as stored in database. We use a string type because the
    * TPC-C specification allows this to be any data type.
    */
-  constructor(w_id: number, db: TPCCDatabase, display: any) {
+  constructor(w_id: number, db: TPCCDatabase, display: any, logger: any) {
 
     this.w_id = w_id;
     this.db = db;
     this.display = display;
+    this.logger = logger;
 
     this.menuProfile        = new MenuProfile(this);
-    this.newOrderProfile    = new NewOrderProfile(this);
-    this.paymentProfile     = new PaymentProfile(this);
+    this.newOrderProfile    = new NewOrderProfile(this, this.logger);
+    this.paymentProfile     = new PaymentProfile(this, this.logger);
     this.orderStatusProfile = new OrderStatusProfile(this);
     this.deliveryProfile    = new DeliveryProfile(this);
     this.stockLevelProfile  = new StockLevelProfile(this);
@@ -266,10 +284,6 @@ class Terminal  {
     }
   }
 
-  getProfile(): TransactionProfile {
-    return this.currentProfile;
-  }
-
   setDisplay(display: any) {
     this.display = display;
   }
@@ -327,11 +341,13 @@ class MenuProfile implements TransactionProfile {
 class NewOrderProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
+  logger: any;
   order: NewOrder;
   status: string;
 
-  constructor(term: Terminal) {
+  constructor(term: Terminal, logger: any) {
     this.term = term;
+    this.logger = logger;
     this.order = new NewOrder();
 
     this.status = '';
@@ -397,7 +413,9 @@ class NewOrderProfile implements TransactionProfile {
        * the implementation here.
        */
       var dup_finder_counter: number;
+      var dup_hunt_counter: number;
 
+      dup_hunt_counter = 1;
       for (dup_finder_counter = 0; dup_finder_counter < i; ++dup_finder_counter) {
 
         if (order.order_lines[dup_finder_counter].ol_i_id === item_id) {
@@ -407,8 +425,12 @@ class NewOrderProfile implements TransactionProfile {
             anti_duplicate = NURand(8191, 1, 100000);
           } while (anti_duplicate === item_id);
 
+          this.logger.log('info', 'Found a duplicate item_id: ' + item_id + ' and replaced it with: ' + anti_duplicate + '; hunt count: ' + dup_hunt_counter);
           item_id = anti_duplicate;
-          break;
+
+          /* Start hunt for diplicates again */
+          ++dup_hunt_counter;
+          dup_finder_counter = -1; /* The increment expression in for loop will increment it to 0 before using it */
         }
       }
 
@@ -455,10 +477,10 @@ class NewOrderProfile implements TransactionProfile {
 
     /* Output values; just clearing these here to avoid errors originating from undefined/null */
     order.o_id        = 0;
-    order.o_entry_d   = new Date(0);
+    order.o_entry_d   = null;
     order.w_tax       = 0;
     order.d_tax       = 0;
-    order.d_next_o_id  = 0;
+    order.d_next_o_id = 0;
     order.c_last      = '';
     order.c_credit    = '';
     order.c_discount  = 0;
@@ -480,6 +502,11 @@ class NewOrderProfile implements TransactionProfile {
      */
     self.term.db.doNewOrderTransaction(self.order, function(status: string, order: NewOrder) {
 
+      /*
+       * TODO: In case of an error, extract the Order ID from error message and
+       * set that on the 'order' object, so that it gets displayed on the screen
+       * upon screen refresh.
+       */
       self.status = status;
 
       self.order = order;
@@ -507,7 +534,7 @@ class NewOrderProfile implements TransactionProfile {
     var order: NewOrder = this.order;
 
     var out:string = newOrderScreen
-                      .replace('Warehouse:     '          , printf('Warehouse: %4d'      , order.w_id))
+                      .replace('Warehouse:       '        , printf('Warehouse: %6d'      , order.w_id))
                       .replace('Customer:     '           , printf('Customer: %4d'       , order.c_id))
                       .replace('Order Number:         '   , printf('Order Number: %8d'   , order.o_id))
                       .replace('District:   '             , printf('District: %2d'       , order.d_id))
@@ -517,7 +544,7 @@ class NewOrderProfile implements TransactionProfile {
                       .replace('Discount:       '         , printf('Discount: %.4f'      , order.c_discount))
                       .replace('WTax:       '             , printf('WTax: %.4f'          , order.w_tax))
                       .replace('DTax:       '             , printf('DTax: %.4f'          , order.d_tax))
-                      .replace('Order Date:           '   , printf('Order Date: %-10s'    , order.o_entry_d.getFullYear() + '/' + (order.o_entry_d.getMonth()+1) + '/' + order.o_entry_d.getDate()))
+                      .replace('Order Date:           '   , printf('Order Date: %-10s'   , order.o_entry_d === null ? '' : order.o_entry_d.getFullYear() + '/' + (order.o_entry_d.getMonth()+1) + '/' + order.o_entry_d.getDate()))
                       .replace('Total:        '           , printf('Total: %7.2f'        , order.total_amount))
                       .replace('Item number is not valid' , printf('%-24s'               , this.status))
                       ;
@@ -544,10 +571,24 @@ class NewOrderProfile implements TransactionProfile {
 class PaymentProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
-  status: string;  /* TODO: remove this and add actual variables */
+  logger: any;
+  payment: Payment;
 
-  constructor(term: Terminal) {
+  constructor(term: Terminal, logger: any) {
     this.term = term;
+    this.logger = logger;
+    this.payment = new Payment();
+
+    /*
+     * These fields are not cleard once populated, so need to initialize these
+     * here. Else the code would barf on undefined members.
+     */
+    this.payment.w_name      = '';
+    this.payment.w_street_1  = '';
+    this.payment.w_street_2  = '';
+    this.payment.w_city      = '';
+    this.payment.w_state     = '';
+    this.payment.w_zip       = '';
   }
 
   getKeyingTime() {
@@ -559,42 +600,122 @@ class PaymentProfile implements TransactionProfile {
     return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
   }
 
+  /* Clause 2.5.1 */
   prepareInput() {
 
-    this.status = 'P';
+    var payment = this.payment;
+
+    payment.w_id        = this.term.w_id;
+    payment.d_id        = getRand(1, 10);
+
+    if (g_num_warehouses === 1) {
+      payment.c_w_id = payment.w_id;
+    } else {
+      var x = getRand(1, 100);
+
+      if (x <= 85) {
+        payment.c_w_id    = payment.w_id;
+        payment.c_d_id    = payment.d_id;
+      } else {
+
+          do {
+            payment.c_w_id = getRand(1, g_num_warehouses);
+          } while (payment.c_w_id === payment.w_id);
+      }
+
+      payment.c_d_id    = getRand(1, 10);
+    }
+
+    var y = getRand(1, 100);
+
+    if (y <= 60) {
+      payment.c_id      = 0;
+      payment.c_last    = generate_c_last(NURand(255,0,999));
+    } else {
+      payment.c_id      = NURand(1023,1,3000);
+      payment.c_last    = '';
+    }
+
+    payment.h_amount    = 1 + (getRand(100, 500000)/100);
+    payment.d_name      = '';
+    payment.d_street_1  = '';
+    payment.d_street_2  = '';
+    payment.d_city      = '';
+    payment.d_state     = '';
+    payment.d_zip       = '';
+    payment.c_first     = '';
+    payment.c_middle    = '';
+    payment.c_street_1  = '';
+    payment.c_street_2  = '';
+    payment.c_city      = '';
+    payment.c_state     = '';
+    payment.c_zip       = '';
+    payment.c_phone     = '';
+    payment.c_since     = null;
+    payment.c_credit    = '';
+    payment.c_credit_lim= 0;
+    payment.c_discount  = 0;
+    payment.c_balance   = 0;
+    payment.c_data      = '';
+    payment.h_date      = null;
   }
 
   execute(){
 
     var self = this;
 
-    self.status = 'E';
-
-    /* Do-nothing transaction */
-
-    /* Simulate a transaction that takes 1 second */
-    setTimeout(function(){
-      self.receiveTransactionResponse();
-      }, nullDBResponseTime);
-  }
-
-  receiveTransactionResponse(){
-
-    var self = this;
-
-    ++xact_counts['Payment'];
-
-    self.status = 'R';
-
     self.term.refreshDisplay();
 
-    setTimeout(function(){
-        self.term.showMenu();
-      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
+    self.term.db.doPaymentTransaction(self.payment, function(status: string, payment: Payment) {
+
+      /* TODO: Make use of the 'status' string */
+      self.payment = payment;
+
+      ++xact_counts['Payment'];
+
+      self.term.refreshDisplay();
+
+      setTimeout(function(){
+          self.term.showMenu();
+        }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
+      }
+    );
   }
 
   getScreen(): string {
-      return paymentScreen.replace('Status:  ', 'Status: ' + this.status);
+      var p: Payment = this.payment;
+
+      var out:string =
+        paymentScreen
+        .replace('Date:           '                           , printf('Date: %-10s'            , (p.h_date === null ? '' : p.h_date.getFullYear() + '/' + (p.h_date.getMonth()+1) + '/' + p.h_date.getDate())))
+        .replace('Warehouse:       '                          , printf('Warehouse: %6d'         , p.w_id))
+        .replace('W_STREET_1          '                       , printf('%-20s'                  , p.w_street_1))
+        .replace('W_STREET_2          '                       , printf('%-20s'                  , p.w_street_2))
+        .replace('W_CITY                           '          , printf('%-20s %2s %9s'          , p.w_city, p.w_state, p.w_zip))
+        .replace('District:   '                               , printf('District: %2d'          , (p.d_id === 0 ?  0 : p.d_id)))
+        .replace('D_STREET_1          '                       , printf('%-20s'                  , p.d_street_1))
+        .replace('D_STREET_2          '                       , printf('%-20s'                  , p.d_street_2))
+        .replace('D_CITY                           '          , printf('%-20s %2s %9s'          , p.d_city, p.d_state, p.d_zip))
+        .replace('Customer:     '                             , printf('Customer: %4d'          , p.c_id))
+        .replace('Cust-Warehouse:       '                     , printf('Cust-Warehouse: %-6d'   , p.c_w_id))
+        .replace('Cust-District:   '                          , printf('Cust-District: %2d'     , p.c_d_id))
+        .replace('Cust-Discount:       '                      , printf('Cust-Discount: %.4f'    , p.c_discount))
+        .replace('Name:                                     ' , printf('Name: %-16s %-2s %-16s' , p.c_first, p.c_middle, p.c_last))
+        .replace('C_STREET_1          '                       , printf('%-20s'                  , p.c_street_1))
+        .replace('C_STREET_2          '                       , printf('%-20s'                  , p.c_street_2))
+        .replace('C_CITY                           '          , printf('%-20s %2s %9s'          , p.c_city, p.c_state, p.c_zip))
+        .replace('Cust-Phone:                 '               , printf('Cust-Phone: %-16s'      , p.c_phone))
+        .replace('Cust-Since:           '                     , printf('Cust-Since: %-10s'      , (p.c_since === null ? '' : p.c_since.getFullYear() + '/' + (p.c_since.getMonth()+1) + '/' + p.c_since.getDate())))
+        .replace('Cust-Credit:   '                            , printf('Cust-Credit: %2s'       , p.c_credit))
+        .replace('Amount Paid:        '                        , printf('Amount Paid: %7.2f'   , p.h_amount))
+        .replace('New Cust-Balance:             '             , printf('New Cust-Balance: %-12.2s'  , p.c_balance))
+        .replace('Credit Limit:             '                 , printf('Credit Limit: %12.2f'    , p.c_credit_lim))
+        .replace('CUST-DATA1                                        ', printf('%-50s'            , p.c_credit === 'BC' ? p.c_data.substring(0,50)    : ''))
+        .replace('CUST-DATA2                                        ', printf('%-50s'            , p.c_credit === 'BC' ? p.c_data.substring(50,100)  : ''))
+        .replace('CUST-DATA3                                        ', printf('%-50s'            , p.c_credit === 'BC' ? p.c_data.substring(100,150) : ''))
+        .replace('CUST-DATA4                                        ', printf('%-50s'            , p.c_credit === 'BC' ? p.c_data.substring(150,200) : ''))
+        ;
+      return out;
   }
 }
 
@@ -776,18 +897,18 @@ class StockLevelProfile implements TransactionProfile {
 var menuScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
-/*02*/+"|                                                                                |\n"
-/*03*/+"|                                      TPC-C                                     |\n"
+/*02*/+"|                                      TPC-C                                     |\n"
+/*03*/+"|                                 TRANSACTION MENU                               |\n"
 /*04*/+"|                                                                                |\n"
-/*05*/+"|                                                                                |\n"
-/*06*/+"|                                                                                |\n"
-/*07*/+"|                                                                                |\n"
-/*08*/+"|                                                                                |\n"
-/*10*/+"|                                                                                |\n"
+/*05*/+"| 1. New Order                                                                   |\n"
+/*06*/+"| 2. Payment                                                                     |\n"
+/*07*/+"| 3. Order Status                                                                |\n"
+/*08*/+"| 4. Delivery                                                                    |\n"
+/*10*/+"| 5. Stock Level                                                                 |\n"
 /*11*/+"|                                                                                |\n"
 /*12*/+"|                                                                                |\n"
 /*13*/+"|                                                                                |\n"
-/*14*/+"|                                    MENU SCREEN                                 |\n"
+/*14*/+"|                                                                                |\n"
 /*09*/+"|                                                                                |\n"
 /*15*/+"|                                                                                |\n"
 /*16*/+"|                                                                                |\n"
@@ -805,7 +926,7 @@ var newOrderScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
 /*02*/+"|                                 New Order                                      |\n"
-/*03*/+"|Warehouse:      District:    WTax:        DTax:                                 |\n"
+/*03*/+"|Warehouse:        District:    WTax:        DTax:                               |\n"
 /*04*/+"|Customer:       Name:                   Credit:    Discount:                    |\n"
 /*05*/+"|Order Number:          Number of Lines:    Order Date:            Total:        |\n"
 /*06*/+"|                                                                                |\n"
@@ -832,27 +953,27 @@ var newOrderScreen: string =
 var paymentScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
-/*02*/+"|                                                                                |\n"
-/*03*/+"|                                 Payment                                        |\n"
+/*02*/+"|                                     Payment                                    |\n"
+/*03*/+"|Date:                                                                           |\n"
 /*04*/+"|                                                                                |\n"
-/*05*/+"| Status:                                                                        |\n"
-/*06*/+"|                                                                                |\n"
-/*07*/+"|                                                                                |\n"
-/*08*/+"|                                                                                |\n"
+/*05*/+"|Warehouse:                               District:                              |\n"
+/*06*/+"|W_STREET_1                               D_STREET_1                             |\n"
+/*07*/+"|W_STREET_2                               D_STREET_2                             |\n"
+/*08*/+"|W_CITY                                   D_CITY                                 |\n"
 /*10*/+"|                                                                                |\n"
-/*11*/+"|                                                                                |\n"
-/*12*/+"|                                                                                |\n"
-/*13*/+"|                                                                                |\n"
-/*14*/+"|                                                                                |\n"
-/*09*/+"|                                                                                |\n"
+/*11*/+"|Customer:      Cust-Warehouse:        Cust-District:    Cust-Discount:          |\n"
+/*12*/+"|Name:                                                                           |\n"
+/*13*/+"|      C_STREET_1                         Cust-Phone:                            |\n"
+/*14*/+"|      C_STREET_2                         Cust-Since:                            |\n"
+/*09*/+"|      C_CITY                             Cust-Credit:                           |\n"
 /*15*/+"|                                                                                |\n"
-/*16*/+"|                                                                                |\n"
-/*17*/+"|                                                                                |\n"
+/*16*/+"|Amount Paid:          New Cust-Balance:                                         |\n"
+/*17*/+"|Credit Limit:                                                                   |\n"
 /*18*/+"|                                                                                |\n"
-/*19*/+"|                                                                                |\n"
-/*20*/+"|                                                                                |\n"
-/*21*/+"|                                                                                |\n"
-/*22*/+"|                                                                                |\n"
+/*19*/+"|Cust-Data: CUST-DATA1                                                           |\n"
+/*20*/+"|           CUST-DATA2                                                           |\n"
+/*21*/+"|           CUST-DATA3                                                           |\n"
+/*22*/+"|           CUST-DATA4                                                           |\n"
 /*23*/+"|                                                                                |\n"
 /*24*/+"|________________________________________________________________________________|\n"
 ;
@@ -860,8 +981,8 @@ var paymentScreen: string =
 var orderStatusScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
-/*02*/+"|                                                                                |\n"
-/*03*/+"|                              Order Status                                      |\n"
+/*02*/+"|                                   Order Status                                 |\n"
+/*03*/+"|                                                                                |\n"
 /*04*/+"|                                                                                |\n"
 /*05*/+"| Status:                                                                        |\n"
 /*06*/+"|                                                                                |\n"
@@ -888,8 +1009,8 @@ var orderStatusScreen: string =
 var deliveryScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
-/*02*/+"|                                                                                |\n"
-/*03*/+"|                                Delivery                                        |\n"
+/*02*/+"|                                     Delivery                                   |\n"
+/*03*/+"|                                                                                |\n"
 /*04*/+"|                                                                                |\n"
 /*05*/+"| Status:                                                                        |\n"
 /*06*/+"|                                                                                |\n"
@@ -916,8 +1037,8 @@ var deliveryScreen: string =
 var stockLevelScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
-/*02*/+"|                                                                                |\n"
-/*03*/+"|                               Stock Level                                      |\n"
+/*02*/+"|                                   Stock Level                                  |\n"
+/*03*/+"|                                                                                |\n"
 /*04*/+"|                                                                                |\n"
 /*05*/+"| Status:                                                                        |\n"
 /*06*/+"|                                                                                |\n"

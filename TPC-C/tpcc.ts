@@ -27,6 +27,12 @@ var GPLv3Message =
 + "\n" + "are welcome to redistribute it under terms of GNU General Public License version 3.";
 
 var blessed = require('blessed');
+var winston = require('winston');
+var g_logger = new (winston.Logger)({ exitOnError: false })
+g_logger.handleExceptions(new winston.transports.File({ filename: '/tmp/tpcc_exceptions.log' }))
+g_logger.add(winston.transports.File, { filename: '/tmp/tpcc.' + process.pid + '.log' });
+
+g_logger.log('info', 'Beginning TPC-C run.');
 
 /* Create a screen */
 /*
@@ -103,7 +109,7 @@ function increase_warehouse_count(count: number) {
 
     for (j = 0; j < 10; ++j) {
                                           /* Warehouse IDs are 1 based */
-      g_terminals[i*10 + j] = new Terminal(i+1, new NullDB(), (i === 0 && j === 0) ? mainBox : null);
+      g_terminals[i*10 + j] = new Terminal(i+1, new Postgres(g_logger), (i === 0 && j === 0) ? mainBox : null, g_logger);
     }
   }
 
@@ -114,7 +120,7 @@ function decrease_warehouse_count(count: number) {
     /* TODO */
 }
 
-increase_warehouse_count(1000);
+increase_warehouse_count(15);
 
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {

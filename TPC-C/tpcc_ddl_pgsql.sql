@@ -91,6 +91,8 @@ create table CUSTOMER (
 	foreign key (C_W_ID, C_D_ID) references DISTRICT(D_W_ID, D_ID)
 );
 
+create index on CUSTOMER(C_LAST);
+
 create table HISTORY (
 	H_C_ID		integer,
 	H_C_D_ID	integer,
@@ -246,6 +248,9 @@ $$ language plpgsql;
 
 /*
  * Function to generate C_LAST; see Clause 4.3.2.3
+ *
+ * If you feel a need to modify this, then also make sure the JavaScript version
+ * of this function is also updated accordingly.
  */
 create or replace function generate_c_last(num integer) returns text as $$
 declare
@@ -254,6 +259,7 @@ declare
 	second	integer = (num % 100) / 10;
 	third	integer = num % 10;
 begin
+	/* The Postgres arrays are 1-based, so increment all offsets by 1 */
 	return arr[first+1] || arr[second+1] || arr[third+1];
 end;
 $$ language plpgsql;
@@ -475,7 +481,7 @@ begin
 						case when o_id < 2101 then
 							0
 						else
-							floor(1 + (random() * (999999 + 1)))/100
+							floor(1 + (random() * (999999)))/100
 						end												as OL_AMOUNT,
 						random_a_string(24, 24)							as OL_DIST_INFO
 				from orders_inserted,
@@ -541,9 +547,9 @@ $$ language plpgsql;
  * Clause 2.3.1 explicitly allows the commands within a transaction to be
  * performed in any order (with an exception described in Clause 2.4.2.3). So we
  * can perform different parts of this function in different orders to reduce
- * the amount of time these intra-transaction commands spend waiting for each
- * other; at least one top TPC-C 'Full Disclosure Report' shows that other
- * vendors leverage this flexibility.
+ * the amount of time these intra-transaction commands spend waiting for the
+ * same command in another transaction; at least one top TPC-C
+ * 'Full Disclosure Report' shows that other vendors leverage this flexibility.
  *
  * But I feel that since there can be only 10 terminals operating for a warehouse,
  * and because of the transaction mix requirements, very few of those may be
@@ -689,15 +695,13 @@ create or replace function process_new_order(order_p new_order_param) returns ne
 			* the specification. The 'irrelevant' data mentioned above is the
 			* 'Successful item count:' below.
 			*/
-			select throw_error('Item number is not valid. Order id: '
+			select throw_error('Item number is not valid; Order ID: '
 						|| (select generated_o_id from district_updated)
-						|| ' Successful item count: '
-						|| (select count(*) from order_line_inserted)) from order_lines_invalid
 		)
 		-- , debug as (
 		-- 	select case raise_notice('order_lines_computed: ' || order_lines_computed::text) when 'null' then '1' else '2' end from order_lines_computed limit 1
 		-- )
-	select (
+	select (	/* TODO: See if a join, instead of sub-selects, will yeild a better performance below */
 		order_p.w_id,
 		order_p.d_id,
 		order_p.c_id,
@@ -761,6 +765,200 @@ where (a).ol_i_id = 4;
 
 
 */
+
+create type payment_param as (
+	w_id        	integer,			/* Input */
+	d_id        	integer,			/* Input */
+	c_w_id      	integer,			/* Input */
+	c_d_id      	integer,			/* Input */
+	c_id        	integer,			/* In/Out */ /* Only one of c_id or c_name is non-zero/null at a time */
+	c_last      	text,				/* In/Out */
+	h_amount		double precision,	/* Input */
+	w_name      	text,				/* Output */
+	w_street_1  	text,				/* Output */
+	w_street_2  	text,				/* Output */
+	w_city      	text,				/* Output */
+	w_state     	text,				/* Output */
+	w_zip       	text,				/* Output */
+	d_name      	text,				/* Output */
+	d_street_1  	text,				/* Output */
+	d_street_2  	text,				/* Output */
+	d_city      	text,				/* Output */
+	d_state     	text,				/* Output */
+	d_zip       	text,				/* Output */
+	c_first     	text,				/* Output */
+	c_middle    	text,				/* Output */
+	--c_last    	text,				/* This is an In/Out parameter, see above */
+	c_street_1  	text,				/* Output */
+	c_street_2  	text,				/* Output */
+	c_city      	text,				/* Output */
+	c_state     	text,				/* Output */
+	c_zip       	text,				/* Output */
+	c_phone     	text,				/* Output */
+	c_since     	timestamptz,		/* Output */
+	c_credit    	text,				/* Output */
+	c_credit_lim	double precision,	/* Output */
+	c_discount  	double precision,	/* Output */
+	c_balance   	double precision,	/* Output */
+	c_data      	text,				/* Output */
+	h_date      	timestamptz			/* Output */
+);
+
+/*
+ * Function to process the 'Payment' transaction profile.
+ */
+create or replace function process_payment(payment payment_param) returns payment_param as $$
+	with
+		customer_selected as (
+			select	payment.c_w_id, payment.c_d_id, payment.c_id
+			where	payment.c_id <> 0
+			union all
+			select	C_W_ID,
+					C_D_ID,
+					C_ID
+			from	(select	C_W_ID,
+							C_D_ID,
+							C_ID,
+							row_number() over () as position,
+							count(*) over () as numrows
+					from	CUSTOMER
+					where	payment.c_id = 0
+					and		C_W_ID = payment.c_w_id
+					and		C_D_ID = payment.c_d_id
+					and		C_LAST = payment.c_last
+					order by
+							C_FIRST asc
+					) as v
+			where	position = ceil(numrows::double precision/2)
+		),
+		customer_updated as (
+			update	CUSTOMER
+			set		C_BALANCE = C_BALANCE - payment.h_amount,
+					C_YTD_PAYMENT = C_YTD_PAYMENT + payment.h_amount,
+					C_PAYMENT_CNT = C_PAYMENT_CNT + 1,
+					C_DATA =	case C_CREDIT
+								when 'GC' then C_DATA
+								when 'BC' then
+									(C_ID::text || C_D_ID::text || C_W_ID::text
+									|| payment.d_id::text || payment.w_id::text
+									|| payment.h_amount::text || C_DATA)::varchar(500)
+								end
+			where	(C_W_ID, C_D_ID, C_ID) = (select c_w_id, c_d_id, c_id from customer_selected)
+			returning
+					C_W_ID,
+					C_D_ID,
+					C_ID,
+					C_FIRST,
+					C_MIDDLE,
+					C_LAST,
+					C_STREET_1,
+					C_STREET_2,
+					C_CITY,
+					C_STATE,
+					C_ZIP,
+					C_PHONE,
+					C_SINCE,
+					C_CREDIT,
+					C_CREDIT_LIM,
+					C_DISCOUNT,
+					C_BALANCE,
+					C_DATA
+		),
+		warehouse_updated as (
+			update	WAREHOUSE
+			set		W_YTD = W_YTD + payment.h_amount
+			where	W_ID = payment.w_id
+			returning
+					W_NAME,
+					W_STREET_1,
+					W_STREET_2,
+					W_CITY,
+					W_STATE,
+					W_ZIP
+		),
+		district_updated as (
+			update	DISTRICT
+			set		D_YTD = D_YTD + payment.h_amount
+			where	D_W_ID = payment.w_id
+			and		D_ID = payment.d_id
+			returning
+					D_NAME,
+					D_STREET_1,
+					D_STREET_2,
+					D_CITY,
+					D_STATE,
+					D_ZIP
+		),
+		history_inserted as (
+			insert into HISTORY(H_C_ID, H_C_D_ID, H_C_W_ID, H_D_ID, H_W_ID, H_DATE, H_DATA)
+			select	c_id, c_d_id, c_w_id, payment.d_id, payment.w_id,
+					now(),
+					(select w_name from warehouse_updated)
+					||'    '|| (select d_name from district_updated)
+			from customer_updated
+			returning H_DATE,
+								H_DATA
+		)
+	select	(	/* TODO: See if a join, instead of sub-selects, will yeild a better performance below */
+		payment.w_id,
+		payment.d_id,
+		payment.c_w_id,
+		payment.c_d_id,
+		(select c_id			from customer_updated),
+		(select c_last			from customer_updated),
+		payment.h_amount,
+		(select w_name			from warehouse_updated),
+		(select w_street_1		from warehouse_updated),
+		(select w_street_2		from warehouse_updated),
+		(select w_city			from warehouse_updated),
+		(select w_state			from warehouse_updated),
+		(select w_zip			from warehouse_updated),
+		(select d_name			from district_updated),
+		(select d_street_1		from district_updated),
+		(select d_street_2		from district_updated),
+		(select d_city			from district_updated),
+		(select d_state			from district_updated),
+		(select d_zip			from district_updated),
+		(select c_first			from customer_updated),
+		(select c_middle		from customer_updated),
+		(select c_street_1		from customer_updated),
+		(select c_street_2		from customer_updated),
+		(select c_city			from customer_updated),
+		(select c_state			from customer_updated),
+		(select c_zip			from customer_updated),
+		(select c_phone			from customer_updated),
+		(select c_since			from customer_updated),
+		(select c_credit		from customer_updated),
+		(select c_credit_lim	from customer_updated),
+		(select c_discount		from customer_updated),
+		(select c_balance		from customer_updated),
+		(select c_data			from customer_updated),
+		(select h_date			from history_inserted)
+	)::payment_param
+	;
+$$ language sql;
+
+/*
+
+Some examples showing invocation using C_ID and C_LAST
+
+del=# select process_payment((1, 2, 1, 2, 2118, '', 200.02, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)::payment_param);
+																																																																																									process_payment
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+(1,2,1,2,2118,ATIONEINGABLE,200.02,wVvtuS4G,Cou1jePr9JkQnxuBe1r,oZIjucOngudT,HUcWJD6tXWQvrsJsUWQ,Fa,897111111,Bxaoklb,EEWQexlTP0U8A0b,lN5N3P7Emh3G,f9hT688Et2tuWB5W,gi,306111111,g6soktwPHn,OE,lXMq91QjYcZy22zZKPgQ,EbLa0sy8extck,llJFjVERYHqXrfdixSt,2u,669111111,1,"2014-07-09 15:02:43.391488-04",GC,50000,0.4954,-410.04,"2014-07-09 15:24:23.310113-04","wVvtuS4G    Bxaoklb")
+(1 row)
+
+del=# select process_payment((1, 2, 1, 2, 0, 'BARANTICALLY', 200.02, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)::payment_param);
+																																																																																										process_payment
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+(1,2,1,2,67,BARANTICALLY,200.02,wVvtuS4G,Cou1jePr9JkQnxuBe1r,oZIjucOngudT,HUcWJD6tXWQvrsJsUWQ,Fa,897111111,Bxaoklb,EEWQexlTP0U8A0b,lN5N3P7Emh3G,f9hT688Et2tuWB5W,gi,306111111,obVUGEPP1R4,OE,Kaey6yIj5QYNqH,Pm1eLd9GTOwJ,nOf8YtH42po8fnVG48v,aK,398211111,405788972683,"2014-07-09 15:02:43.391488-04",BC,50000,0.1331,-610.06,"2014-07-09 15:32:18.600261-04","wVvtuS4G    Bxaoklb")
+(1 row)
+
+prepare del(payment_param) as select to_json(process_payment($1::payment_param)) as output;
+execute del($$(1, 2, 1, 2, 0,ATIONEINGABLE, 200.02,,,,,,,,,,,,,,,,,,,,,,,,,,,)$$);
+
+
+ */
 
 /*
  * Function to perform sanity checks on the initial data loaded. The purpose of

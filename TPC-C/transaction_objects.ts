@@ -43,3 +43,43 @@ class NewOrder {
       }
   }
 }
+
+class Payment {
+    w_id        : number;  /* Input */
+    d_id        : number;  /* Input */
+    c_w_id      : number;  /* Input */
+    c_d_id      : number;  /* Input */
+    c_id        : number;  /* In/Out */ /* Only one of c_id or c_name is non-zero/null at a time */
+    c_last      : string;  /* In/Out */
+    h_amount    : number;  /* Input */
+    w_name      : string;  /* Output */
+    w_street_1  : string;  /* Output */
+    w_street_2  : string;  /* Output */
+    w_city      : string;  /* Output */
+    w_state     : string;  /* Output */
+    w_zip       : string;  /* Output */
+    d_name      : string;  /* Output */
+    d_street_1  : string;  /* Output */
+    d_street_2  : string;  /* Output */
+    d_city      : string;  /* Output */
+    d_state     : string;  /* Output */
+    d_zip       : string;  /* Output */
+    c_first     : string;  /* Output */
+    c_middle    : string;  /* Output */
+    //c_last    : string;  /* This is an In/Out parameter; see above */
+    c_street_1  : string;  /* Output */
+    c_street_2  : string;  /* Output */
+    c_city      : string;  /* Output */
+    c_state     : string;  /* Output */
+    c_zip       : string;  /* Output */
+    c_phone     : string;  /* Output */
+    c_since     : Date;    /* Output */
+    c_credit    : string;  /* Output */
+    c_credit_lim: number;  /* Output */
+    c_discount  : number;  /* Output */
+    c_balance   : number;  /* Output */
+    c_data      : string;    /* Output */
+    h_date      : Date;    /* Output */
+
+    constructor() {}
+}

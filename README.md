@@ -211,3 +211,12 @@ developed in JavaScript here.
 But I chose to not use JSON for database communication purely for performance
 reasons. Making the database do something that can be done by the client would
 make database performance suffer.
+
+8. Do not pass user-defined types to and from the database
+
+	In the same vein as not passing JSON back and forth, do not pass objects
+either. The serialization and deserialization of user-defined types consumes
+CPU which can be put to better use.
+
+TODO: The code currently in place violates both the above decisions, for lack
+of time. Fix code to adhere to the above two decisions.
