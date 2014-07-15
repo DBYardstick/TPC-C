@@ -37,7 +37,7 @@ class NewOrder {
 
     this.order_lines = [];
 
-    var i;
+    var i: number;
       for (i = 0; i < 15; ++i) {
         this.order_lines[i] = new OrderLine(0, 0, 0, 0, '', '', 0, '', 0);
       }
@@ -99,7 +99,7 @@ class Delivery {
   constructor() {
     this.delivered_orders = [];
 
-    var i;
+    var i: number;
     for (i = 0; i < 10; ++i) {
       this.delivered_orders[i] = new DeliveredOrder(0, 0);
     }

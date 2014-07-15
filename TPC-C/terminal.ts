@@ -296,7 +296,7 @@ interface TransactionProfile {
   getThinkTime(): number;  /* Clause 5.2.5.7 */
 
   /* Prepare fresh input */
-  prepareInput();
+  prepareInput(): void;
 
   /* Execute the transaction
    *
@@ -304,7 +304,7 @@ interface TransactionProfile {
    * when the transaction response is received. That function then in turn
    * should call the terminal's showMenu() after think-time.
    */
-  execute();
+  execute(): void;
 }
 
 /*
@@ -719,10 +719,23 @@ class PaymentProfile implements TransactionProfile {
   }
 }
 
+/*
+ * The specification requires that if any Delivery transaction processes less
+ * than 10 orders (one from each of 10 districts), then this should be logged.
+ * And if the total number of such transactions reaches 1%, then it should be
+ * reported (in Full Disclosure Report, I'm guessing).
+ *
+ * Per the specification: The result file must be organized in such a way that
+ * the percentage of skipped deliveries and skipped districts can be determined.
+ *
+ * TODO: Develop test code that scours the log file/keeps track of this
+ * percentage.
+ */
 class DeliveryDetails {
   queued_at: Date;
   ended_at: Date;
   status: string;
+  n_delivered_orders: number;
   output: Delivery;
 }
 
@@ -775,6 +788,7 @@ class DeliveryProfile implements TransactionProfile {
 
       self.details.ended_at = new Date();
       self.stage = 'Delivery complete';
+      self.details.n_delivered_orders = delivery.delivered_orders.length;
       self.details.output = delivery;
 
       self.delivery = delivery;
@@ -874,14 +888,6 @@ class OrderStatusProfile implements TransactionProfile {
  * According to Clause 3.4.1, this is the only transaction profile in the
  * specification that is allowed to run in Read Committed transaction isolation
  * mode; all others are required to run in at least Repeatable Read mode.
- *
- * The specification requires that if any Delivery transaction processes less
- * than 10 orders (one from each of 10 districts), then this should be logged.
- * And if the total number of such transactions reaches 1%, then it should be
- * reported (in Full Disclosure Report, I'm guessing).
- *
- * Per the specification: The result file must be organized in such a way that
- * the percentage of skipped deliveries and skipped districts can be determined.
  */
 class StockLevelProfile implements TransactionProfile {
 

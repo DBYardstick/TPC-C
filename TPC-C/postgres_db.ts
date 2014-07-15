@@ -27,10 +27,10 @@ class Postgres implements TPCCDatabase {
 		var self = this;
 
 		/* Get a pooled connection */
-		pg.connect(self.connString, function(err, client, done) {
+		pg.connect(self.connString, function(err: any, client: any, done: any) {
 
 			if (err) {
-				self.logger.log('error','error fetching client from pool: ' + err);
+				self.logger.log('error','error fetching client from pool: ' + JSON.stringify(err));
 				return;
 			}
 
@@ -67,12 +67,12 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_new_order($1::new_order_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_new_order];
 
-			client.query( {name: 'New Order', text: query, values: bind_values }, function(err, result) {
+			client.query( {name: 'New Order', text: query, values: bind_values }, function(err: any, result: any) {
 
 				// Release the client back to the pool
 				done();
 
-				if(err) {
+				if (err) {
 					callback('Error: ' + err, input);
 					return;
 				}
@@ -143,10 +143,10 @@ class Postgres implements TPCCDatabase {
 		var self = this;
 
 		/* Get a pooled connection */
-		pg.connect(self.connString, function(err, client, done) {
+		pg.connect(self.connString, function(err: any, client: any, done: any) {
 
 			if (err) {
-				self.logger.log('error','error fetching client from pool: ' + err);
+				self.logger.log('error','error fetching client from pool: ' + JSON.stringify(err));
 				return;
 			}
 
@@ -163,7 +163,7 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_payment($1::payment_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_payment];
 
-			client.query( {name: 'Payment', text: query, values: bind_values }, function(err, result) {
+			client.query( {name: 'Payment', text: query, values: bind_values }, function(err: any, result: any) {
 
 				// Release the client back to the pool
 				done();
@@ -215,15 +215,22 @@ class Postgres implements TPCCDatabase {
 		});
 	}
 
+	/*
+	 * Since delivery transaction can be executed in asyncronous mode, and because
+	 * it has very relaxed response-time requirements, we should gather multiple
+	 * transactions here and execute them all in one go.
+	 *
+	 * TODO: Implement the above idea, and see if it yeilds better results.
+	 */
 	doDeliveryTransaction(input: Delivery, callback: (status: string, output: Delivery) => void) {
 
 		var self = this;
 
 		/* Get a pooled connection */
-		pg.connect(self.connString, function(err, client, done) {
+		pg.connect(self.connString, function(err: any, client: any, done: any) {
 
 			if (err) {
-				self.logger.log('error','error fetching client from pool: ' + err);
+				self.logger.log('error','error fetching client from pool: ' + JSON.stringify(err));
 				return;
 			}
 
@@ -235,7 +242,7 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_delivery($1::delivery_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_delivery];
 
-			client.query( {name: 'Delivery', text: query, values: bind_values }, function(err, result) {
+			client.query( {name: 'Delivery', text: query, values: bind_values }, function(err: any, result: any) {
 
 				// Release the client back to the pool
 				done();

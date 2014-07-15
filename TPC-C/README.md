@@ -1,11 +1,27 @@
 
-Build and watch for changes, from the top directory.
+Developers
+==========
 
-    tsc -w --out TPC-C/runner.js TPC-C/{null_db,transaction_objects,db_interface,postgres_db,terminal,tpcc}.ts
+Prerequisites
+-------------
 
-Run it, from the top directory.
+1. NodeJS 0.10.x
+2. TypScript compiler
+3. GNU Make (or equivalent)
 
-    node TPC-C/runner.js
+
+Compile and Run
+---------------
+
+In the `TPC-C` directory:
+
+- Use `make` to compile the source code.
+
+- Use `make run` to execute the TPC-C tests, and compile the code if necessary.
+
+- Use `make watch` to launch the compiler in 'watch' mode, where it watches
+source files for changes and automatically compiles them as you save the source
+files.
 
 TODO
 ====
