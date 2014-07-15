@@ -80,6 +80,28 @@ class Payment {
     c_balance   : number;  /* Output */
     c_data      : string;    /* Output */
     h_date      : Date;    /* Output */
+}
 
-    constructor() {}
+class DeliveredOrder {
+  constructor(
+    public d_id : number,
+    public o_id : number
+  ){
+
+  }
+}
+
+class Delivery {
+  w_id              : number;  /* Input */
+  carrier_id        : number;  /* Input */
+  delivered_orders  : DeliveredOrder[];    /* Output */
+
+  constructor() {
+    this.delivered_orders = [];
+
+    var i;
+    for (i = 0; i < 10; ++i) {
+      this.delivered_orders[i] = new DeliveredOrder(0, 0);
+    }
+  }
 }

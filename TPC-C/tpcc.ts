@@ -91,7 +91,7 @@ var adminBox: any = blessed.box({
 
 
 /* End the program on these keys */
-mainScreen.key(['escape', 'q', 'C-c'], function(ch, key) {
+mainScreen.key(['q', 'C-c'], function(ch, key) {
   return process.exit(0);
 });
 

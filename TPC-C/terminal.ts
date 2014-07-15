@@ -719,6 +719,100 @@ class PaymentProfile implements TransactionProfile {
   }
 }
 
+class DeliveryDetails {
+  queued_at: Date;
+  ended_at: Date;
+  status: string;
+  output: Delivery;
+}
+
+class DeliveryProfile implements TransactionProfile {
+
+  term: Terminal;  /* term.w_id is the terminal's warehouse */
+
+  delivery: Delivery;
+  details: DeliveryDetails;
+  stage: string;
+
+  constructor(term: Terminal) {
+    this.term = term;
+
+    this.delivery = new Delivery();
+    this.details = new DeliveryDetails();
+
+    /*
+     * This Delivery transaction parameter does not change for a terminal, so
+     * initialize it here.
+     */
+    this.delivery.w_id = this.term.w_id;
+  }
+
+  getKeyingTime() {
+    return 2000;  /* Clause 5.2.5.7 */
+  }
+
+  meanThinkTime: number = 5;  /* Clause 5.2.5.7 */
+  getThinkTime() {
+    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
+  }
+
+  prepareInput() {
+
+    this.stage = '';
+
+    /* this.delivery.w_id is iniitalized in the constructor */
+    this.delivery.carrier_id = getRand(1, 10);
+
+  }
+
+  execute(){
+
+    var self = this;
+
+    self.term.refreshDisplay();
+
+    self.term.db.doDeliveryTransaction(self.delivery, function(status: string, delivery: Delivery) {
+
+      self.details.ended_at = new Date();
+      self.stage = 'Delivery complete';
+      self.details.output = delivery;
+
+      self.delivery = delivery;
+
+      ++xact_counts['Delivery'];
+
+      self.term.logger.log('info', self.details);
+
+      /* This is a response from a queued/batched transaction, so no need to refresh the display. */
+    });
+
+    self.details.queued_at = new Date();
+    self.stage = 'Delivery has been queued';
+
+    /*
+     * Specification requires that the terminal not wait for the response from
+     * the Delivery transaction. So we move on to Menu screen after think-time.
+     */
+    setTimeout(function(){
+        self.term.showMenu();
+      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
+  }
+
+  getScreen(): string {
+
+      var d: Delivery = this.delivery;
+
+      var out:string =
+        deliveryScreen
+        .replace('Warehouse:       '                          , printf('Warehouse: %-6d'        , d.w_id))
+        .replace('Carrier Number:   '                         , printf('Carrier Number: %-2d'   , d.carrier_id))
+        .replace('Execution Status:                         ' , printf('Execution Status: %24s' , this.stage))
+        ;
+
+      return out;
+  }
+}
+
 class OrderStatusProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
@@ -776,63 +870,19 @@ class OrderStatusProfile implements TransactionProfile {
   }
 }
 
-class DeliveryProfile implements TransactionProfile {
-
-  term: Terminal;  /* term.w_id is the terminal's warehouse */
-  status: string;  /* TODO: remove this and add actual variables */
-
-  constructor(term: Terminal) {
-    this.term = term;
-  }
-
-  getKeyingTime() {
-    return 2000;  /* Clause 5.2.5.7 */
-  }
-
-  meanThinkTime: number = 5;  /* Clause 5.2.5.7 */
-  getThinkTime() {
-    return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
-  }
-
-  prepareInput() {
-
-    this.status = 'P';
-  }
-
-  execute(){
-
-    var self = this;
-
-    self.status = 'E';
-
-    /* Do-nothing transaction */
-
-    /* Simulate a transaction that takes 1 second */
-    setTimeout(function(){
-      self.receiveTransactionResponse();
-      }, nullDBResponseTime);
-  }
-
-  receiveTransactionResponse(){
-
-    var self = this;
-
-    ++xact_counts['Delivery'];
-
-    self.status = 'R';
-
-    self.term.refreshDisplay();
-
-    setTimeout(function(){
-        self.term.showMenu();
-      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
-  }
-
-  getScreen(): string {
-      return deliveryScreen.replace('Status:  ', 'Status: ' + this.status);
-  }
-}
-
+/*
+ * According to Clause 3.4.1, this is the only transaction profile in the
+ * specification that is allowed to run in Read Committed transaction isolation
+ * mode; all others are required to run in at least Repeatable Read mode.
+ *
+ * The specification requires that if any Delivery transaction processes less
+ * than 10 orders (one from each of 10 districts), then this should be logged.
+ * And if the total number of such transactions reaches 1%, then it should be
+ * reported (in Full Disclosure Report, I'm guessing).
+ *
+ * Per the specification: The result file must be organized in such a way that
+ * the percentage of skipped deliveries and skipped districts can be determined.
+ */
 class StockLevelProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
@@ -1010,11 +1060,11 @@ var deliveryScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
 /*02*/+"|                                     Delivery                                   |\n"
-/*03*/+"|                                                                                |\n"
+/*03*/+"| Warehouse:                                                                     |\n"
 /*04*/+"|                                                                                |\n"
-/*05*/+"| Status:                                                                        |\n"
+/*05*/+"| Carrier Number:                                                                |\n"
 /*06*/+"|                                                                                |\n"
-/*07*/+"|                                                                                |\n"
+/*07*/+"| Execution Status:                                                              |\n"
 /*08*/+"|                                                                                |\n"
 /*10*/+"|                                                                                |\n"
 /*11*/+"|                                                                                |\n"

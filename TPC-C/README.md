@@ -6,3 +6,12 @@ Build and watch for changes, from the top directory.
 Run it, from the top directory.
 
     node TPC-C/runner.js
+
+TODO
+====
+
+1. Allow a configurable value for the first active warehouse-id.
+
+2. Allow user to increase/decrease the think/keying times, with an aim of
+   increasing/decreasing the transaction rates using the same number of
+   active warehouses.

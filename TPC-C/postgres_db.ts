@@ -4,9 +4,13 @@ var pg = require('pg');
 
 class Postgres implements TPCCDatabase {
 
-	connString: string = 'postgres://postgres:password@localhost/postgres';
+	connString: string = 'postgres://postgres:password@localhost/tpcc_15w';
 	logger: any;
 	dummy_mode: boolean = false;
+
+	setDummyMode(dummy_mode: boolean): void {
+		this.dummy_mode = dummy_mode;
+	}
 
 	getName() { return 'Postgres' + (this.dummy_mode ? 'Dummy' : ''); }
 
@@ -25,8 +29,9 @@ class Postgres implements TPCCDatabase {
 		/* Get a pooled connection */
 		pg.connect(self.connString, function(err, client, done) {
 
-			if(err) {
-				return console.error('error fetching client from pool', err);
+			if (err) {
+				self.logger.log('error','error fetching client from pool: ' + err);
+				return;
 			}
 
 			var item_counter: number;
@@ -69,6 +74,11 @@ class Postgres implements TPCCDatabase {
 
 				if(err) {
 					callback('Error: ' + err, input);
+					return;
+				}
+
+				if (self.dummy_mode) {
+					callback('Success', input);
 					return;
 				}
 
@@ -135,8 +145,9 @@ class Postgres implements TPCCDatabase {
 		/* Get a pooled connection */
 		pg.connect(self.connString, function(err, client, done) {
 
-			if(err) {
-				return console.error('error fetching client from pool', err);
+			if (err) {
+				self.logger.log('error','error fetching client from pool: ' + err);
+				return;
 			}
 
 			var serialized_payment: string =
@@ -159,6 +170,11 @@ class Postgres implements TPCCDatabase {
 
 				if(err) {
 					callback('Error: ' + err, input);
+					return;
+				}
+
+				if (self.dummy_mode) {
+					callback('Success', input);
 					return;
 				}
 
@@ -197,5 +213,58 @@ class Postgres implements TPCCDatabase {
 				callback('Success', input);
 			});
 		});
+	}
+
+	doDeliveryTransaction(input: Delivery, callback: (status: string, output: Delivery) => void) {
+
+		var self = this;
+
+		/* Get a pooled connection */
+		pg.connect(self.connString, function(err, client, done) {
+
+			if (err) {
+				self.logger.log('error','error fetching client from pool: ' + err);
+				return;
+			}
+
+			var serialized_delivery: string =
+			'('
+			+ input.w_id + ','
+			+ input.carrier_id + ',)';
+
+			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_delivery($1::delivery_param)) as output';
+			var bind_values = self.dummy_mode ? ['1'] : [serialized_delivery];
+
+			client.query( {name: 'Delivery', text: query, values: bind_values }, function(err, result) {
+
+				// Release the client back to the pool
+				done();
+
+				if(err) {
+					/* TODO: In case of 'Serialization' error, retry the transaction. */
+					callback('Error: ' + err, input);
+					return;
+				}
+
+				if (self.dummy_mode) {
+					callback('Success', input);
+					return;
+				}
+
+				var output = result.rows[0].output;
+
+				input.delivered_orders = output.delivered_orders;
+
+				callback('Success', input);
+			});
+		});
+	}
+
+}
+
+class PostgresDummy extends Postgres {
+	constructor(logger: any) {
+		super(logger);
+		super.setDummyMode(true);
 	}
 }

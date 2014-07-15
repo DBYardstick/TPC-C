@@ -694,9 +694,15 @@ create or replace function process_new_order(order_p new_order_param) returns ne
 			* Generated 'Order ID' needs to be reported back to the client, per
 			* the specification. The 'irrelevant' data mentioned above is the
 			* 'Successful item count:' below.
+			*
+			* TODO: Remove 'Successful item count' message, as it's not necessary, and
+			* replace the whole query with a minimal query that ensures executiond of
+			* all nodes.
 			*/
 			select throw_error('Item number is not valid; Order ID: '
 						|| (select generated_o_id from district_updated)
+						|| ' Successful item count: '
+						|| (select count(*) from order_line_inserted)) from order_lines_invalid
 		)
 		-- , debug as (
 		-- 	select case raise_notice('order_lines_computed: ' || order_lines_computed::text) when 'null' then '1' else '2' end from order_lines_computed limit 1
@@ -959,6 +965,128 @@ execute del($$(1, 2, 1, 2, 0,ATIONEINGABLE, 200.02,,,,,,,,,,,,,,,,,,,,,,,,,,,)$$
 
 
  */
+
+create type delivered_order_param as (
+	d_id	integer,
+	o_id	integer
+);
+
+create type delivery_param as (
+	w_id				integer,				/* Input */
+	carrier_id			integer,				/* Input */
+	delivered_orders	delivered_order_param[]	/* Output */
+);
+
+create or replace function process_delivery(delivery delivery_param) returns delivery_param as $$
+	with
+		district_list as (
+			select s as d_id from generate_series(1, 10) as s
+		),
+		new_order_deleted as (
+			/*
+			 * If there are more than one transactions in-flight for the same
+			 * warehouse, the first one to delete a row will block the next
+			 * one until committed. When the blocked transaction resumes after
+			 * the blocking transaction commits, it may not see the row anymore
+			 * that it was waiting for because it has been deleted.
+			 *
+			 * This is why TPC-C requires that this transaction profile (and
+			 * all others except Stock Level) be performed with Repeatable Read
+			 * Transaction Isolation. See Clause 3.4.1.
+			 *
+			 * In Postgres, a transaction executing with Repeatable Read
+			 * isolation may encounter serilization errors, in response to which,
+			 * the application may simply retry the transaction with the hopes
+			 * of a successful execution.
+			 *
+			 * At least one other TPC-C Full Disclosure Report shows that the
+			 * application simply retries a transaction on any kind of failure.
+			 */
+			delete
+			from	NEW_ORDER as no
+			using	district_list as dl
+			where	no.NO_W_ID = delivery.w_id
+			and		no.NO_D_ID = dl.d_id
+			and		no.NO_O_ID = (select	min(NO_O_ID)
+									from	NEW_ORDER
+									where	NO_W_ID = delivery.w_id -- Same as no.NO_W_ID
+									and		NO_D_ID = no.NO_D_ID)
+			returning
+					no.NO_D_ID,
+					no.NO_O_ID
+		),
+		orders_updated as (
+			update	ORDERS
+			set		O_CARRIER_ID = delivery.carrier_id
+			from	new_order_deleted as nod
+			where	O_W_ID = delivery.w_id
+			and		O_D_ID = nod.no_d_id
+			and		O_ID = nod.no_o_id
+			returning
+					O_D_ID,
+					O_ID,
+					O_C_ID
+		),
+		order_line_updated as (
+			update	ORDER_LINE
+			set		OL_DELIVERY_D = clock_timestamp() -- XXX Spec says "system time as resturned by operating system", can we use now()?
+			from	orders_updated as ou
+			where	OL_W_ID = delivery.w_id
+			and		OL_D_ID = ou.o_d_id
+			and		OL_O_ID = ou.o_id
+			returning
+					OL_D_ID,
+					OL_O_ID,
+					OL_AMOUNT
+		),
+		customer_order_total as (
+			select	C_D_ID,
+					C_ID,
+					sum(ol_amount) as customer_total
+			from	order_line_updated
+			join	orders_updated
+				/* No need to join on w_id between CTE result-sets since w_id is constant for one execution of this function */
+				on	ol_d_id = o_d_id
+				and	ol_o_id = o_id
+			join	CUSTOMER
+				on	C_W_ID = delivery.w_id
+				and	C_D_ID = o_d_id
+				and	C_ID = o_c_id
+			group by
+					C_D_ID,
+					C_ID
+		),
+		customer_updated as (
+			update	CUSTOMER as c
+			set		C_BALANCE = C_BALANCE + customer_total,
+					C_DELIVERY_CNT = C_DELIVERY_CNT + 1
+			from	customer_order_total as t
+			where	c.C_W_ID = delivery.w_id
+			and		C.C_D_ID = t.c_d_id
+			and		C.C_ID = t.c_id
+		)
+		select	(delivery.w_id,
+				delivery.carrier_id,
+				(select array_agg((o_d_id, o_id)::delivered_order_param) from orders_updated))::delivery_param
+		;
+$$ language sql;
+
+/*
+Sample execution of the Delivery transaction
+
+prepare del(delivery_param) as select to_json(process_delivery($1::delivery_param)) as output;
+
+begin;
+execute del($$(1, 2,)$$);
+rollback;
+
+                                                                                                                                        output
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"w_id":2,"carrier_id":3,"delivered_orders":[{"d_id":1,"o_id":2101},{"d_id":2,"o_id":2101},{"d_id":3,"o_id":2101},{"d_id":4,"o_id":2101},{"d_id":5,"o_id":2101},{"d_id":6,"o_id":2101},{"d_id":7,"o_id":2101},{"d_id":8,"o_id":2101},{"d_id":9,"o_id":2101},{"d_id":10,"o_id":2101}]}
+(1 row)
+
+ */
+
 
 /*
  * Function to perform sanity checks on the initial data loaded. The purpose of

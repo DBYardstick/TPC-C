@@ -28,4 +28,15 @@ interface TPCCDatabase {
    * case of success, it should contain 'Success'.
    */
   doPaymentTransaction(input: Payment, callback: (status: string, output: Payment) => void);
+
+  /*
+   * In case of successful transaction execution, the 'output' object should be
+   * the same object that was passed in as 'input' but with all the fields
+   * populated.
+   *
+   * In case of an error, the 'status' string should contain 'Error', and in
+   * case of success, it should contain 'Success'.
+   */
+  doDeliveryTransaction(input: Delivery, callback: (status: string, output: Delivery) => void);
+
 }
