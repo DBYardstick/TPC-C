@@ -64,7 +64,7 @@ class Postgres implements TPCCDatabase {
 			 * because in the ad-hoc runs I did not see a measurable difference in query
 			 * run times.
 			 */
-			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_new_order($1::new_order_param)) as output';
+			var query				= self.dummy_mode ? 'SELECT $1::int AS "New Order"' : 'select to_json(process_new_order($1::new_order_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_new_order];
 
 			client.query( {name: 'New Order', text: query, values: bind_values }, function(err: any, result: any) {
@@ -73,7 +73,7 @@ class Postgres implements TPCCDatabase {
 				done();
 
 				if (err) {
-					callback('Error: ' + err, input);
+					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
 
@@ -160,7 +160,7 @@ class Postgres implements TPCCDatabase {
 			+ input.c_last + ','
 			+ input.h_amount + ',,,,,,,,,,,,,,,,,,,,,,,,,,,)';
 
-			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_payment($1::payment_param)) as output';
+			var query				= self.dummy_mode ? 'SELECT $1::int AS "Payment"' : 'select to_json(process_payment($1::payment_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_payment];
 
 			client.query( {name: 'Payment', text: query, values: bind_values }, function(err: any, result: any) {
@@ -169,7 +169,7 @@ class Postgres implements TPCCDatabase {
 				done();
 
 				if(err) {
-					callback('Error: ' + err, input);
+					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
 
@@ -239,7 +239,7 @@ class Postgres implements TPCCDatabase {
 			+ input.w_id + ','
 			+ input.carrier_id + ',)';
 
-			var query				= self.dummy_mode ? 'SELECT $1::int AS number' : 'select to_json(process_delivery($1::delivery_param)) as output';
+			var query				= self.dummy_mode ? 'SELECT $1::int AS "Delivery"' : 'select to_json(process_delivery($1::delivery_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_delivery];
 
 			client.query( {name: 'Delivery', text: query, values: bind_values }, function(err: any, result: any) {
@@ -249,7 +249,7 @@ class Postgres implements TPCCDatabase {
 
 				if(err) {
 					/* TODO: In case of 'Serialization' error, retry the transaction. */
-					callback('Error: ' + err, input);
+					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
 
@@ -261,6 +261,75 @@ class Postgres implements TPCCDatabase {
 				var output = result.rows[0].output;
 
 				input.delivered_orders = output.delivered_orders;
+
+				callback('Success', input);
+			});
+		});
+	}
+
+	doOrderStatusTransaction(input: OrderStatus, callback: (status: string, output: OrderStatus) => void): void {
+		var self = this;
+
+		/* Get a pooled connection */
+		pg.connect(self.connString, function(err: any, client: any, done: any) {
+
+			if (err) {
+				self.logger.log('error','error fetching client from pool: ' + JSON.stringify(err));
+				return;
+			}
+
+			var serialized_order_status: string =
+			'('
+			+ input.w_id + ','
+			+ input.d_id + ','
+			+ input.c_id + ','
+			+ input.c_last
+			+ ',,,,,,,)';
+
+			var query				= self.dummy_mode ? 'SELECT $1::int AS "Order Status"' : 'select to_json(process_order_status($1::order_status_param)) as output';
+			var bind_values = self.dummy_mode ? ['1'] : [serialized_order_status];
+
+			client.query( {name: 'Order Status', text: query, values: bind_values }, function(err: any, result: any) {
+
+				// Release the client back to the pool
+				done();
+
+				if(err) {
+					/* TODO: In case of 'Serialization' error, retry the transaction. */
+					callback('Error: ' + JSON.stringify(err), input);
+					return;
+				}
+
+				if (self.dummy_mode) {
+					callback('Success', input);
+					return;
+				}
+
+				var output = result.rows[0].output;
+
+				input.c_id			 = output.c_id;
+				input.c_last       	 = output.c_last;
+				input.c_middle       = output.c_middle;
+				input.c_first        = output.c_first;
+				input.c_balance      = output.c_balance;
+				input.o_id           = output.o_id;
+				input.o_entry_d      = new Date(Date.parse(output.o_entry_d));
+				input.o_carrier_id   = output.o_carrier_id;
+
+				var i: number;
+				for (i = 0; i < 15; ++i) {
+					if (! output.order_lines || ! output.order_lines[i] || output.order_lines[i].ol_i_id === -1) {
+						break;
+					}
+
+					var ol_dd = output.order_lines[i].ol_delivery_d;
+
+					input.order_lines[i].ol_i_id			    = output.order_lines[i].ol_i_id;
+					input.order_lines[i].ol_supply_w_id  	= output.order_lines[i].ol_supply_w_id;
+					input.order_lines[i].ol_quantity		  = output.order_lines[i].ol_quantity;
+					input.order_lines[i].ol_amount		    = output.order_lines[i].ol_amount;
+					input.order_lines[i].ol_delivery_d	  = ol_dd === null ? new Date(0) : new Date(Date.parse(ol_dd));
+				}
 
 				callback('Success', input);
 			});

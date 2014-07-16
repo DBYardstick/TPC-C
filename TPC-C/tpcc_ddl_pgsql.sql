@@ -499,7 +499,7 @@ begin
 end;
 $$ language plpgsql;
 
-create type order_line_param as (
+create type new_order_line_param as (
 	ol_i_id        integer,				/* Input */
 	ol_supply_w_id integer,				/* Input */
 	ol_quantity    integer,				/* Input */
@@ -515,7 +515,7 @@ create type new_order_param as (
 	w_id			integer,					/* Input */
 	d_id			integer,					/* Input */
 	c_id			integer,					/* Input */
-	order_lines		order_line_param[],			/* Input */
+	order_lines		new_order_line_param[],			/* Input */
 	o_id			integer,					/* Output */
 	o_entry_d		timestamp with time zone,	/* Output */
 	w_tax			double precision,			/* Output */
@@ -711,7 +711,7 @@ create or replace function process_new_order(order_p new_order_param) returns ne
 		order_p.w_id,
 		order_p.d_id,
 		order_p.c_id,
-		(select array_agg((ol_i_id, ol_supply_w_id, ol_quantity, i_price, i_name, i_data, s_quantity, brand_generic, ol_amount)::order_line_param) from order_lines_computed),
+		(select array_agg((ol_i_id, ol_supply_w_id, ol_quantity, i_price, i_name, i_data, s_quantity, brand_generic, ol_amount)::new_order_line_param) from order_lines_computed),
 		(select generated_o_id from district_updated),
 		now(),	/* now() is stable within a transaction, so we don't need to get it from order_inserted */
 		(select w_tax from warehouse_selected),
@@ -722,7 +722,7 @@ create or replace function process_new_order(order_p new_order_param) returns ne
 		(select c_discount from customer_selected),
 		(select count(*) from order_lines_input),
 		(select sum(ol_amount)
-				* (1-(select c_discount from customer_selected))
+				* (1 - (select c_discount from customer_selected))
 				* (1 + (select w_tax from warehouse_selected)
 					+ (select d_tax from district_updated))
 				/* An expression to force the ERROR if an unused I_ID is provided */
@@ -1085,8 +1085,123 @@ rollback;
  {"w_id":2,"carrier_id":3,"delivered_orders":[{"d_id":1,"o_id":2101},{"d_id":2,"o_id":2101},{"d_id":3,"o_id":2101},{"d_id":4,"o_id":2101},{"d_id":5,"o_id":2101},{"d_id":6,"o_id":2101},{"d_id":7,"o_id":2101},{"d_id":8,"o_id":2101},{"d_id":9,"o_id":2101},{"d_id":10,"o_id":2101}]}
 (1 row)
 
- */
+*/
 
+create type order_status_line_param as (
+	ol_i_id			integer,				/* Input */
+	ol_supply_w_id	integer,				/* Input */
+	ol_quantity		integer,				/* Input */
+	ol_amount		double precision,		/* Output */
+	ol_delivery_d	timestamptz				/* Output */
+);
+
+create type order_status_param as (
+	w_id			integer,					/* Input */
+	d_id			integer,					/* Input */
+	c_id			integer,					/* In/Out */
+	c_last			text,						/* In/Out */
+	c_middle		text,						/* Output */
+	c_first			text,						/* Output */
+	c_balance		double precision,			/* Output */
+	o_id			integer,					/* Output */
+	o_entry_d		timestamptz,				/* Output */
+	o_carrier_id	integer,					/* Output */
+	order_lines		order_status_line_param[]	/* Output */
+);
+
+create or replace function process_order_status(order_status order_status_param) returns order_status_param as $$
+	with
+		customer_selected as (
+			select	order_status.c_id as c_id,
+					C_FIRST,
+					C_MIDDLE,
+					C_LAST,
+					C_BALANCE
+			from	CUSTOMER
+			where	order_status.c_id <> 0
+			and		C_W_ID = order_status.w_id
+			and		C_D_ID = order_status.d_id
+			and		C_ID = order_status.c_id
+			union all
+			select	C_ID,
+					C_FIRST,
+					C_MIDDLE,
+					C_LAST,
+					C_BALANCE
+			from	(select	C_ID,
+							C_FIRST,
+							C_MIDDLE,
+							C_LAST,
+							C_BALANCE,
+							row_number() over () as position,
+							count(*) over () as numrows
+					from	CUSTOMER
+					where	order_status.c_id = 0
+					and		C_W_ID = order_status.w_id
+					and		C_D_ID = order_status.d_id
+					and		C_LAST = order_status.c_last
+					order by
+							C_FIRST asc
+					) as v
+			where	position = ceil(numrows::double precision/2)
+		),
+		order_selected as (
+			select	O_ID,
+					O_ENTRY_D,
+					O_CARRIER_ID
+			from	ORDERS
+			where	(O_W_ID, O_D_ID, O_ID)
+					= (select	O_W_ID, O_D_ID, max(O_ID)
+						from	ORDERS
+						where	O_W_ID = order_status.w_id
+						and		O_D_ID = order_status.d_id
+						and		O_C_ID = (select c_id from customer_selected)
+						group by
+								O_W_ID, O_D_ID
+						)
+		),
+		order_lines_selected as (
+			select	OL_I_ID,
+					OL_SUPPLY_W_ID,
+					OL_QUANTITY,
+					OL_AMOUNT,
+					OL_DELIVERY_D
+			from	ORDER_LINE
+			where	OL_W_ID = order_status.w_id
+			and		OL_D_ID = order_status.d_id
+			and		OL_O_ID = (select o_id from order_selected)
+		)
+	select (	/* TODO: See if a join, instead of sub-selects, will yeild a better performance below */
+		order_status.w_id,
+		order_status.d_id,
+		(select c_id from customer_selected),
+		(select c_last from customer_selected),
+		(select c_middle from customer_selected),
+		(select c_first from customer_selected),
+		(select c_balance from customer_selected),
+		(select o_id from order_selected),
+		(select o_entry_d from order_selected),
+		(select o_carrier_id from order_selected),
+		(select array_agg((ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d)::order_status_line_param) from order_lines_selected)
+	)::order_status_param;
+$$ language sql;
+
+/*
+Sample execution of the Order Status transaction
+
+prepare del(order_status_param) as select to_json(process_order_status($1::order_status_param)) as output;
+
+begin;
+execute del($$(1, 2, 2118,,,,,,,,)$$);
+execute del($$(1, 2, 0,BARANTICALLY,,,,,,,)$$);
+rollback;
+
+																																		output
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{"w_id":2,"carrier_id":3,"delivered_orders":[{"d_id":1,"o_id":2101},{"d_id":2,"o_id":2101},{"d_id":3,"o_id":2101},{"d_id":4,"o_id":2101},{"d_id":5,"o_id":2101},{"d_id":6,"o_id":2101},{"d_id":7,"o_id":2101},{"d_id":8,"o_id":2101},{"d_id":9,"o_id":2101},{"d_id":10,"o_id":2101}]}
+(1 row)
+
+*/
 
 /*
  * Function to perform sanity checks on the initial data loaded. The purpose of

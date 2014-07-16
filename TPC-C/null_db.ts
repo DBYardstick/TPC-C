@@ -72,6 +72,17 @@ class DummyDB implements TPCCDatabase {
       callback('Success', input);
     }
   }
+
+  /* TODO: Implement the "Dummy" OrderStatus transaction here */
+  doOrderStatusTransaction(input: OrderStatus, callback: (status: string, output: OrderStatus) => void): void {
+    if (nullDBResponseTime > 0) {
+      setTimeout(function(){
+        callback('Success', input);
+        }, nullDBResponseTime);
+    } else {
+      callback('Success', input);
+    }
+  }
 }
 
 class NullDB implements TPCCDatabase {
@@ -80,15 +91,19 @@ class NullDB implements TPCCDatabase {
 
   constructor(logger: any) {}
 
-  doNewOrderTransaction(input: NewOrder, callback: (status: string, output: NewOrder) => void) {
+  doNewOrderTransaction(input: NewOrder, callback: (status: string, output: NewOrder) => void): void {
     callback('Success', input);
   }
 
-  doPaymentTransaction(input: Payment, callback: (status: string, output: Payment) => void) {
+  doPaymentTransaction(input: Payment, callback: (status: string, output: Payment) => void): void {
     callback('Success', input);
   }
 
-  doDeliveryTransaction(input: Delivery, callback: (status: string, output: Delivery) => void) {
+  doDeliveryTransaction(input: Delivery, callback: (status: string, output: Delivery) => void): void {
+    callback('Success', input);
+  }
+
+  doOrderStatusTransaction(input: OrderStatus, callback: (status: string, output: OrderStatus) => void): void {
     callback('Success', input);
   }
 }
