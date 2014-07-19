@@ -4,7 +4,9 @@ var pg = require('pg');
 
 class Postgres implements TPCCDatabase {
 
+
 	connString: string = 'postgres://postgres:password@localhost/tpcc_15w';
+	//connString: string = 'socket:/tmp/?db=tpcc_15w&user=postgres';	//Specifying user=XX doesn't work; set env. variable $PGUSER instead.
 	logger: any;
 	dummy_mode: boolean = false;
 
@@ -73,6 +75,7 @@ class Postgres implements TPCCDatabase {
 				done();
 
 				if (err) {
+					self.logger.log('error', JSON.stringify(err));
 					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
@@ -168,7 +171,8 @@ class Postgres implements TPCCDatabase {
 				// Release the client back to the pool
 				done();
 
-				if(err) {
+				if (err) {
+					self.logger.log('error', JSON.stringify(err));
 					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
@@ -247,8 +251,9 @@ class Postgres implements TPCCDatabase {
 				// Release the client back to the pool
 				done();
 
-				if(err) {
+				if (err) {
 					/* TODO: In case of 'Serialization' error, retry the transaction. */
+					self.logger.log('error', JSON.stringify(err));
 					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
@@ -294,8 +299,9 @@ class Postgres implements TPCCDatabase {
 				// Release the client back to the pool
 				done();
 
-				if(err) {
+				if (err) {
 					/* TODO: In case of 'Serialization' error, retry the transaction. */
+					self.logger.log('error', JSON.stringify(err));
 					callback('Error: ' + JSON.stringify(err), input);
 					return;
 				}
@@ -336,6 +342,42 @@ class Postgres implements TPCCDatabase {
 		});
 	}
 
+	doStockLevelTransaction(input: StockLevel, callback: (status: string, output: StockLevel) => void): void {
+		var self = this;
+
+		/* Get a pooled connection */
+		pg.connect(self.connString, function(err: any, client: any, done: any) {
+
+			if (err) {
+				self.logger.log('error','error fetching client from pool: ' + JSON.stringify(err));
+				return;
+			}
+
+			var query				= self.dummy_mode ? 'SELECT $1::int AS "Stock Level"' : 'select process_stock_level($1,$2,$3) as low_stock';
+			var bind_values: any = self.dummy_mode ? ['1'] : [input.w_id, input.d_id, input.threshold];
+
+			client.query( {name: 'Stock Level', text: query, values: bind_values }, function(err: any, result: any) {
+
+				// Release the client back to the pool
+				done();
+
+				if (err) {
+					self.logger.log('error', JSON.stringify(err));
+					callback('Error: ' + JSON.stringify(err), input);
+					return;
+				}
+
+				if (self.dummy_mode) {
+					callback('Success', input);
+					return;
+				}
+
+				input.low_stock = result.rows[0].low_stock;
+
+				callback('Success', input);
+			});
+		});
+	}
 }
 
 class PostgresDummy extends Postgres {

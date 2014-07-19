@@ -83,8 +83,22 @@ class DummyDB implements TPCCDatabase {
       callback('Success', input);
     }
   }
+
+  /* TODO: Implement the "Dummy" StckLevel transaction here */
+  doStockLevelTransaction(input: StockLevel, callback: (status: string, output: StockLevel) => void): void {
+    if (nullDBResponseTime > 0) {
+      setTimeout(function(){
+        callback('Success', input);
+        }, nullDBResponseTime);
+    } else {
+      callback('Success', input);
+    }
+  }
 }
 
+/*
+ * The infinitely fast database, as described in comment of Clause 4.1.3
+ */
 class NullDB implements TPCCDatabase {
 
   getName() {return 'NullDB';}
@@ -104,6 +118,10 @@ class NullDB implements TPCCDatabase {
   }
 
   doOrderStatusTransaction(input: OrderStatus, callback: (status: string, output: OrderStatus) => void): void {
+    callback('Success', input);
+  }
+
+  doStockLevelTransaction(input: StockLevel, callback: (status: string, output: StockLevel) => void): void {
     callback('Success', input);
   }
 }

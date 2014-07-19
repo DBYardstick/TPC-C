@@ -185,7 +185,8 @@ var menuThinkTime: number = g_hammer ? 0 : 1000;
 
 class Terminal  {
 
-  public w_id: number;
+  w_id: number;
+  d_id: number;  /* Used only in StockLevel transaction */
   db: TPCCDatabase;
   display: any;
   logger: any;
@@ -203,9 +204,10 @@ class Terminal  {
    * w_id: Warehouse ID, as stored in database. We use a string type because the
    * TPC-C specification allows this to be any data type.
    */
-  constructor(w_id: number, db: TPCCDatabase, display: any, logger: any) {
+  constructor(w_id: number, d_id: number, db: TPCCDatabase, display: any, logger: any) {
 
     this.w_id = w_id;
+    this.d_id = d_id;
     this.db = db;
     this.display = display;
     this.logger = logger;
@@ -974,10 +976,12 @@ class OrderStatusProfile implements TransactionProfile {
 class StockLevelProfile implements TransactionProfile {
 
   term: Terminal;  /* term.w_id is the terminal's warehouse */
-  status: string;  /* TODO: remove this and add actual variables */
+  stock_level: StockLevel;
 
   constructor(term: Terminal) {
     this.term = term;
+
+    this.stock_level = new StockLevel();
   }
 
   getKeyingTime() {
@@ -997,40 +1001,48 @@ class StockLevelProfile implements TransactionProfile {
 
   prepareInput() {
 
-    this.status = 'P';
+    var stock_level = this.stock_level;
+
+    stock_level.w_id = this.term.w_id;
+    stock_level.d_id = this.term.d_id;
+
+    stock_level.threshold = getRand(10, 20);
+    stock_level.low_stock = -1;
   }
 
   execute(){
 
     var self = this;
 
-    self.status = 'E';
-
-    /* Do-nothing transaction */
-
-    /* Simulate a transaction that takes 1 second */
-    setTimeout(function(){
-      self.receiveTransactionResponse();
-      }, nullDBResponseTime);
-  }
-
-  receiveTransactionResponse(){
-
-    var self = this;
-
-    ++xact_counts['Stock Level'];
-
-    self.status = 'R';
-
     self.term.refreshDisplay();
 
-    setTimeout(function(){
-        self.term.showMenu();
-      }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
+    self.term.db.doStockLevelTransaction(self.stock_level, function(status: string, stock_level: StockLevel) {
+
+      /* TODO: Make use of the 'status' string */
+      self.stock_level = stock_level;
+
+      ++xact_counts['Stock Level'];
+
+      self.term.refreshDisplay();
+
+      setTimeout(function(){
+          self.term.showMenu();
+        }, self.getThinkTime() - menuThinkTime);  /* See note above call of Terminal.chooseTransaction() */
+      }
+    );
   }
 
   getScreen(): string {
-      return deliveryScreen.replace('Status:  ', 'Status: ' + this.status);
+    var sl: StockLevel = this.stock_level;
+
+    var out:string = stockLevelScreen
+                      .replace('Warehouse:       '  , printf('Warehouse: %-6d'  , sl.w_id))
+                      .replace('District :   '      , printf('District : %-2d'   , sl.d_id))
+                      .replace('Threshold:   '      , printf('Threshold: %-2d'  , sl.threshold))
+                      .replace('Low Stock:     '    , printf('Low Stock: %-4s' , sl.low_stock === -1 ? '' : sl.low_stock.toString()))
+                      ;
+
+    return out;
   }
 }
 
@@ -1182,10 +1194,10 @@ var stockLevelScreen: string =
 //       01234567890123456789012345678901234567890123456789012345678901234567890123456789
 /*01*/ "|--------------------------------------------------------------------------------|\n"
 /*02*/+"|                                   Stock Level                                  |\n"
-/*03*/+"|                                                                                |\n"
-/*04*/+"|                                                                                |\n"
-/*05*/+"| Status:                                                                        |\n"
-/*06*/+"|                                                                                |\n"
+/*03*/+"| Warehouse:                                                                     |\n"
+/*04*/+"| District :                                                                     |\n"
+/*05*/+"| Threshold:                                                                     |\n"
+/*06*/+"| Low Stock:                                                                     |\n"
 /*07*/+"|                                                                                |\n"
 /*08*/+"|                                                                                |\n"
 /*10*/+"|                                                                                |\n"

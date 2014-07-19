@@ -1203,6 +1203,27 @@ rollback;
 
 */
 
+create or replace function process_stock_level(p_w_id integer, p_d_id integer, p_threshold integer) returns integer as $$
+	with
+		order_line_items_selected as (
+			select	distinct OL_I_ID
+			from	WAREHOUSE
+			join	DISTRICT
+				on	W_ID = D_W_ID
+			join	ORDER_LINE
+				on	OL_W_ID = D_W_ID
+				and	OL_D_ID = D_ID
+			where	W_ID = p_w_id
+			and		D_ID = p_d_id
+			and		OL_O_ID between D_NEXT_O_ID-1 and D_NEXT_O_ID-20
+		)
+	select	count(*)::integer as low_stock
+	from	STOCK
+	where	S_W_ID = p_w_id
+	and		S_QUANTITY < p_threshold
+	and		S_I_ID in (select ol_i_id from order_line_items_selected)
+$$ language sql;
+
 /*
  * Function to perform sanity checks on the initial data loaded. The purpose of
  * this function is to ensure that the initial data loaded does not violate the

@@ -81,9 +81,23 @@ var DummyDB = (function () {
             callback('Success', input);
         }
     };
+
+    /* TODO: Implement the "Dummy" StckLevel transaction here */
+    DummyDB.prototype.doStockLevelTransaction = function (input, callback) {
+        if (nullDBResponseTime > 0) {
+            setTimeout(function () {
+                callback('Success', input);
+            }, nullDBResponseTime);
+        } else {
+            callback('Success', input);
+        }
+    };
     return DummyDB;
 })();
 
+/*
+* The infinitely fast database, as described in comment of Clause 4.1.3
+*/
 var NullDB = (function () {
     function NullDB(logger) {
     }
@@ -104,6 +118,10 @@ var NullDB = (function () {
     };
 
     NullDB.prototype.doOrderStatusTransaction = function (input, callback) {
+        callback('Success', input);
+    };
+
+    NullDB.prototype.doStockLevelTransaction = function (input, callback) {
         callback('Success', input);
     };
     return NullDB;
@@ -184,6 +202,12 @@ var OrderStatus = (function () {
     }
     return OrderStatus;
 })();
+
+var StockLevel = (function () {
+    function StockLevel() {
+    }
+    return StockLevel;
+})();
 /// <reference path="../typings/pg/pg.d.ts" />
 var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -198,7 +222,7 @@ var Postgres = (function () {
         this.connString = 'postgres://postgres:password@localhost/tpcc_15w';
         this.dummy_mode = false;
         /* Set pool size */
-        pg.defaults.poolSize = 395;
+        pg.defaults.poolSize = 1;
 
         this.logger = logger;
     }
@@ -249,14 +273,15 @@ var Postgres = (function () {
             * because in the ad-hoc runs I did not see a measurable difference in query
             * run times.
             */
-            var query = self.dummy_mode ? 'SELECT $1::text AS "New Order"' : 'select to_json(process_new_order($1::new_order_param)) as output';
-            var bind_values = self.dummy_mode ? ['New Order'] : [serialized_new_order];
+            var query = self.dummy_mode ? 'SELECT $1::int AS "New Order"' : 'select to_json(process_new_order($1::new_order_param)) as output';
+            var bind_values = self.dummy_mode ? ['1'] : [serialized_new_order];
 
             client.query({ name: 'New Order', text: query, values: bind_values }, function (err, result) {
                 // Release the client back to the pool
                 done();
 
                 if (err) {
+                    self.logger.log('error', JSON.stringify(err));
                     callback('Error: ' + JSON.stringify(err), input);
                     return;
                 }
@@ -333,14 +358,15 @@ var Postgres = (function () {
 
             var serialized_payment = '(' + input.w_id + ',' + input.d_id + ',' + input.c_w_id + ',' + input.c_d_id + ',' + input.c_id + ',' + input.c_last + ',' + input.h_amount + ',,,,,,,,,,,,,,,,,,,,,,,,,,,)';
 
-            var query = self.dummy_mode ? 'SELECT $1::text AS "Payment"' : 'select to_json(process_payment($1::payment_param)) as output';
-            var bind_values = self.dummy_mode ? ['Payment'] : [serialized_payment];
+            var query = self.dummy_mode ? 'SELECT $1::int AS "Payment"' : 'select to_json(process_payment($1::payment_param)) as output';
+            var bind_values = self.dummy_mode ? ['1'] : [serialized_payment];
 
             client.query({ name: 'Payment', text: query, values: bind_values }, function (err, result) {
                 // Release the client back to the pool
                 done();
 
                 if (err) {
+                    self.logger.log('error', JSON.stringify(err));
                     callback('Error: ' + JSON.stringify(err), input);
                     return;
                 }
@@ -406,8 +432,8 @@ var Postgres = (function () {
 
             var serialized_delivery = '(' + input.w_id + ',' + input.carrier_id + ',)';
 
-            var query = self.dummy_mode ? 'SELECT $1::text AS "Delivery"' : 'select to_json(process_delivery($1::delivery_param)) as output';
-            var bind_values = self.dummy_mode ? ['Delivery'] : [serialized_delivery];
+            var query = self.dummy_mode ? 'SELECT $1::int AS "Delivery"' : 'select to_json(process_delivery($1::delivery_param)) as output';
+            var bind_values = self.dummy_mode ? ['1'] : [serialized_delivery];
 
             client.query({ name: 'Delivery', text: query, values: bind_values }, function (err, result) {
                 // Release the client back to the pool
@@ -415,6 +441,7 @@ var Postgres = (function () {
 
                 if (err) {
                     /* TODO: In case of 'Serialization' error, retry the transaction. */
+                    self.logger.log('error', JSON.stringify(err));
                     callback('Error: ' + JSON.stringify(err), input);
                     return;
                 }
@@ -445,8 +472,8 @@ var Postgres = (function () {
 
             var serialized_order_status = '(' + input.w_id + ',' + input.d_id + ',' + input.c_id + ',' + input.c_last + ',,,,,,,)';
 
-            var query = self.dummy_mode ? 'SELECT $1::text AS "Order Status"' : 'select to_json(process_order_status($1::order_status_param)) as output';
-            var bind_values = self.dummy_mode ? ['Order Status'] : [serialized_order_status];
+            var query = self.dummy_mode ? 'SELECT $1::int AS "Order Status"' : 'select to_json(process_order_status($1::order_status_param)) as output';
+            var bind_values = self.dummy_mode ? ['1'] : [serialized_order_status];
 
             client.query({ name: 'Order Status', text: query, values: bind_values }, function (err, result) {
                 // Release the client back to the pool
@@ -454,6 +481,7 @@ var Postgres = (function () {
 
                 if (err) {
                     /* TODO: In case of 'Serialization' error, retry the transaction. */
+                    self.logger.log('error', JSON.stringify(err));
                     callback('Error: ' + JSON.stringify(err), input);
                     return;
                 }
@@ -493,6 +521,41 @@ var Postgres = (function () {
             });
         });
     };
+
+    Postgres.prototype.doStockLevelTransaction = function (input, callback) {
+        var self = this;
+
+        /* Get a pooled connection */
+        pg.connect(self.connString, function (err, client, done) {
+            if (err) {
+                self.logger.log('error', 'error fetching client from pool: ' + JSON.stringify(err));
+                return;
+            }
+
+            var query = self.dummy_mode ? 'SELECT $1::int AS "Stock Level"' : 'select process_stock_level($1,$2,$3) as low_stock';
+            var bind_values = self.dummy_mode ? ['1'] : [input.w_id, input.d_id, input.threshold];
+
+            client.query({ name: 'Stock Level', text: query, values: bind_values }, function (err, result) {
+                // Release the client back to the pool
+                done();
+
+                if (err) {
+                    self.logger.log('error', JSON.stringify(err));
+                    callback('Error: ' + JSON.stringify(err), input);
+                    return;
+                }
+
+                if (self.dummy_mode) {
+                    callback('Success', input);
+                    return;
+                }
+
+                input.low_stock = result.rows[0].low_stock;
+
+                callback('Success', input);
+            });
+        });
+    };
     return Postgres;
 })();
 
@@ -508,7 +571,7 @@ var printf = require('printf');
 
 var g_num_warehouses = 0;
 var g_terminals = [];
-var g_sleepless = false;
+var g_hammer = false;
 var nullDBResponseTime = 0 * 1000;
 
 /* Return an integer in the inclusive range [min, max] */
@@ -620,15 +683,16 @@ var TPCCStats = (function () {
     return TPCCStats;
 })();
 
-var menuThinkTime = g_sleepless ? 0 : 1000;
+var menuThinkTime = g_hammer ? 0 : 1000;
 
 var Terminal = (function () {
     /*
     * w_id: Warehouse ID, as stored in database. We use a string type because the
     * TPC-C specification allows this to be any data type.
     */
-    function Terminal(w_id, db, display, logger) {
+    function Terminal(w_id, d_id, db, display, logger) {
         this.w_id = w_id;
+        this.d_id = d_id;
         this.db = db;
         this.display = display;
         this.logger = logger;
@@ -664,7 +728,7 @@ var Terminal = (function () {
         * (a) reduce CPU consumption/increase generated load, or (b) to comply with
         * specification's word, upon insistence by the auditor.
         */
-        if (g_sleepless || menuThinkTime === 0)
+        if (g_hammer || menuThinkTime === 0)
             self.chooseTransaction();
         else
             setTimeout(function () {
@@ -754,14 +818,14 @@ var NewOrderProfile = (function () {
         this.status = '';
     }
     NewOrderProfile.prototype.getKeyingTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 18000;
     };
 
     NewOrderProfile.prototype.getThinkTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
@@ -954,14 +1018,14 @@ var PaymentProfile = (function () {
         this.payment.w_zip = '';
     }
     PaymentProfile.prototype.getKeyingTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 3000;
     };
 
     PaymentProfile.prototype.getThinkTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
@@ -1087,14 +1151,14 @@ var DeliveryProfile = (function () {
         this.delivery.w_id = this.term.w_id;
     }
     DeliveryProfile.prototype.getKeyingTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 2000;
     };
 
     DeliveryProfile.prototype.getThinkTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
@@ -1115,7 +1179,7 @@ var DeliveryProfile = (function () {
         self.term.db.doDeliveryTransaction(self.delivery, function (status, delivery) {
             self.details.ended_at = new Date();
             self.stage = 'Delivery complete';
-            self.details.n_delivered_orders = delivery.delivered_orders !== null ? delivery.delivered_orders.length : 0;
+            self.details.n_delivered_orders = (delivery.delivered_orders === null ? 0 : delivery.delivered_orders.length);
             self.details.output = delivery;
 
             self.delivery = delivery;
@@ -1162,7 +1226,7 @@ var OrderStatusProfile = (function () {
         this.order_status.w_id = this.term.w_id;
     }
     OrderStatusProfile.prototype.getKeyingTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 2000;
@@ -1249,53 +1313,58 @@ var StockLevelProfile = (function () {
     function StockLevelProfile(term) {
         this.meanThinkTime = 5;
         this.term = term;
+
+        this.stock_level = new StockLevel();
     }
     StockLevelProfile.prototype.getKeyingTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 2000;
     };
 
     StockLevelProfile.prototype.getThinkTime = function () {
-        if (g_sleepless)
+        if (g_hammer)
             return 0;
         else
             return 1000 * Math.min(this.meanThinkTime * 10, -1 * Math.log(Math.random()) * this.meanThinkTime);
     };
 
     StockLevelProfile.prototype.prepareInput = function () {
-        this.status = 'P';
+        var stock_level = this.stock_level;
+
+        stock_level.w_id = this.term.w_id;
+        stock_level.d_id = this.term.d_id;
+
+        stock_level.threshold = getRand(10, 20);
+        stock_level.low_stock = -1;
     };
 
     StockLevelProfile.prototype.execute = function () {
         var self = this;
 
-        self.status = 'E';
-
-        /* Do-nothing transaction */
-        /* Simulate a transaction that takes 1 second */
-        setTimeout(function () {
-            self.receiveTransactionResponse();
-        }, nullDBResponseTime);
-    };
-
-    StockLevelProfile.prototype.receiveTransactionResponse = function () {
-        var self = this;
-
-        ++xact_counts['Stock Level'];
-
-        self.status = 'R';
-
         self.term.refreshDisplay();
 
-        setTimeout(function () {
-            self.term.showMenu();
-        }, self.getThinkTime() - menuThinkTime); /* See note above call of Terminal.chooseTransaction() */
+        self.term.db.doStockLevelTransaction(self.stock_level, function (status, stock_level) {
+            /* TODO: Make use of the 'status' string */
+            self.stock_level = stock_level;
+
+            ++xact_counts['Stock Level'];
+
+            self.term.refreshDisplay();
+
+            setTimeout(function () {
+                self.term.showMenu();
+            }, self.getThinkTime() - menuThinkTime); /* See note above call of Terminal.chooseTransaction() */
+        });
     };
 
     StockLevelProfile.prototype.getScreen = function () {
-        return deliveryScreen.replace('Status:  ', 'Status: ' + this.status);
+        var sl = this.stock_level;
+
+        var out = stockLevelScreen.replace('Warehouse:       ', printf('Warehouse: %-6d', sl.w_id)).replace('District :   ', printf('District : %-2d', sl.d_id)).replace('Threshold:   ', printf('Threshold: %-2d', sl.threshold)).replace('Low Stock:     ', printf('Low Stock: %-4s', sl.low_stock === -1 ? '' : sl.low_stock.toString()));
+
+        return out;
     };
     return StockLevelProfile;
 })();
@@ -1313,7 +1382,7 @@ var orderStatusScreen = "|------------------------------------------------------
 
 var deliveryScreen = "|--------------------------------------------------------------------------------|\n" + "|                                     Delivery                                   |\n" + "| Warehouse:                                                                     |\n" + "|                                                                                |\n" + "| Carrier Number:                                                                |\n" + "|                                                                                |\n" + "| Execution Status:                                                              |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|________________________________________________________________________________|\n";
 
-var stockLevelScreen = "|--------------------------------------------------------------------------------|\n" + "|                                   Stock Level                                  |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "| Status:                                                                        |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|________________________________________________________________________________|\n";
+var stockLevelScreen = "|--------------------------------------------------------------------------------|\n" + "|                                   Stock Level                                  |\n" + "| Warehouse:                                                                     |\n" + "| District :                                                                     |\n" + "| Threshold:                                                                     |\n" + "| Low Stock:                                                                     |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|________________________________________________________________________________|\n";
 
 var adminScreen = "|--------------------------------------------------------------------------------|\n" + "|                               TPC-C Admin                                      |\n" + "| Database:                 Duration:       Warehouses:                          |\n" + "|                    Total  %/Tot         /s       /min  %/min    avg/min        |\n" + "| New Order   :                                                                  |\n" + "| Payment     :                                                                  |\n" + "| Order Status:                                                                  |\n" + "| Delivery    :                                                                  |\n" + "| Stock Level :                                                                  |\n" + "| Total       :                                                                  |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|                                                                                |\n" + "|________________________________________________________________________________|\n";
 /*
@@ -1412,7 +1481,7 @@ function increase_warehouse_count(count) {
     for (i = g_num_warehouses; i < (g_num_warehouses + count); ++i) {
         for (j = 0; j < 10; ++j) {
             /* Warehouse IDs are 1 based */
-            g_terminals[i * 10 + j] = new Terminal(i + 1, new Postgres(g_logger), (i === 0 && j === 0) ? mainBox : null, g_logger);
+            g_terminals[i * 10 + j] = new Terminal(i + 1, j + 1, new Postgres(g_logger), (i === 0 && j === 0) ? mainBox : null, g_logger);
         }
     }
 
@@ -1423,19 +1492,8 @@ function decrease_warehouse_count(count) {
     /* TODO */
 }
 
-increase_warehouse_count(15);
+increase_warehouse_count(1);
 
-/*
-*  With PostgresDummy DB, at 15000 warehouses, using 4 CPUs we get no NewOrder
-* transactions until about 3 minutes!! This seems to be because of the backlog
-* of Payment transactions that builds up within the first 18-or-so seconds, and
-* for the first 3 minutes the database sees a barrage of Payment transactions.
-* By the time that barrage ends, the backlog of NewOrder transactions builds up
-* and then the database sees only NewOrder transactions for a while.
-*
-* NullDB doesn't exhibit this behaviour, apparently because the backlog never
-* builds up.
-*/
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {
     var stats = new TPCCStats();

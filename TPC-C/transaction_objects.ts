@@ -142,3 +142,10 @@ class OrderStatus {
       }
   }
 }
+
+class StockLevel {
+  w_id       : number;  /* Input */
+  d_id       : number;  /* Input */
+  threshold  : number;  /* Input */
+  low_stock  : number;  /* Output */
+}

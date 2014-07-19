@@ -54,4 +54,7 @@ interface TPCCDatabase {
   doDeliveryTransaction(input: Delivery, callback: (status: string, output: Delivery) => void): void;
 
   doOrderStatusTransaction(input: OrderStatus, callback: (status: string, output: OrderStatus) => void): void;
+
+  doStockLevelTransaction(input: StockLevel, callback: (status: string, output: StockLevel) => void): void;
+
 }

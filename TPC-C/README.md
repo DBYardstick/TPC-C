@@ -36,6 +36,34 @@ the database sees only NewOrder transactions for a while.
   NullDB doesn't exhibit this behaviour, apparently because the backlog never
 builds up.
 
+* Watch backend execution using the following query
+
+```sql
+select  regexp_replace(query, '.*process_(.*)\(.*', '\1') as "Transaction Profile",
+        state as "Current Backend State",
+        count(*) as count,
+        total
+from    (select *,
+                count(*) over () as total
+        from    pg_stat_activity
+        where   pid <> pg_backend_pid()) as v
+group by
+        query, state, total
+order by query, state;
+```
+
+Typical output may look like:
+
+```
+ Transaction Profile | Current Backend State | count | total
+---------------------+-----------------------+-------+-------
+ delivery            | active                |     1 |     5
+ new_order           | active                |     1 |     5
+ order_status        | idle                  |     1 |     5
+ payment             | active                |     1 |     5
+ payment             | idle                  |     1 |     5
+(5 rows)
+```
 
 TODO
 ====
