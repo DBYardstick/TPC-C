@@ -3,7 +3,7 @@ var printf = require('printf');
 
 var g_num_warehouses: number = 0;
 var g_terminals: Terminal[] = [];
-var g_hammer: boolean = false;  /* Hammer mode currently doesn't work reliably and consistently */
+var g_hammer: boolean = uvp_hammer;
 var nullDBResponseTime: number = 0*1000; /* in milliseconds; Response time of the database that doesn't do anything */
 
 /* Return an integer in the inclusive range [min, max] */

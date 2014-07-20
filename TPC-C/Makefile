@@ -1,6 +1,8 @@
 
 OUTPUT = runner.js
-SOURCES = null_db.ts transaction_objects.ts db_interface.ts postgres_db.ts terminal.ts tpcc.ts
+
+# Source files; should be listed in dependency order
+SOURCES = config.ts null_db.ts transaction_objects.ts db_interface.ts postgres_db.ts terminal.ts tpcc.ts
 
 all: $(OUTPUT)
 

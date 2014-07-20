@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "blessed": "0.0.35",
-    "pg": "~3.3.0",
+    "pg.js": "~3.3.0",
     "printf": "^0.2.0",
     "winston": "^0.7.3"
   }

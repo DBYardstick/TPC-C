@@ -23,6 +23,24 @@ In the `TPC-C` directory:
 source files for changes and automatically compiles them as you save the source
 files.
 
+The snippet below shows a typical run, with custom configuration.
+
+```bash
+cd TPC-C/
+
+export TPCC='{"active_warehouses":15, "database_type":"Postgres", "postgres_connection_pool_count": 4, "postgres_connection_string":"postgres://tpcc:password@localhost/postgres"}'
+
+make run
+```
+
+Demo Screencast
+---------------
+Click on the link labeled `slow` in the bottom-right corner of the screencast
+below to see a demo run of TPCC.js against `Postgres` using 15 warehouses (that
+is, 150 clients). The upper half of the screen shows Terminal-1 of Warehouse-1.
+
+<iframe src="http://showterm.io/d269c80846350a4e9051b#8" width="684" height="790"></iframe>
+
 Notes
 =====
 

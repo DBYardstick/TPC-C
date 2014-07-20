@@ -5,7 +5,7 @@ var pg = require('pg');
 class Postgres implements TPCCDatabase {
 
 
-	connString: string = 'postgres://postgres:password@localhost/tpcc_15w';
+	connString: string = uvp_postgres_connection_string;
 	//connString: string = 'socket:/tmp/?db=tpcc_15w&user=postgres';	//Specifying user=XX doesn't work; set env. variable $PGUSER instead.
 	logger: any;
 	dummy_mode: boolean = false;
@@ -19,7 +19,7 @@ class Postgres implements TPCCDatabase {
 	constructor(logger: any) {
 
 		/* Set pool size */
-		pg.defaults.poolSize = 1;
+		pg.defaults.poolSize = uvp_postgres_connection_pool_count;
 
 		this.logger = logger;
 	}

@@ -27,8 +27,6 @@
  * accordingly.
  */
 
-begin transaction;
-
 create table WAREHOUSE (
 	W_ID		integer,
 	W_NAME		varchar(10),
@@ -57,7 +55,7 @@ create table DISTRICT (
 	D_NEXT_O_ID	integer,
 
 	primary key (D_W_ID, D_ID),
-	foreign key (D_W_ID) references WAREHOUSE(W_ID)
+	foreign key (D_W_ID) references WAREHOUSE(W_ID) ON DELETE CASCADE
 );
 
 /*
@@ -88,7 +86,7 @@ create table CUSTOMER (
 	C_DATA			varchar(500),
 
 	primary key (C_W_ID, C_D_ID, C_ID),
-	foreign key (C_W_ID, C_D_ID) references DISTRICT(D_W_ID, D_ID)
+	foreign key (C_W_ID, C_D_ID) references DISTRICT(D_W_ID, D_ID) ON DELETE CASCADE
 );
 
 create index on CUSTOMER(C_LAST);
@@ -103,8 +101,8 @@ create table HISTORY (
 	H_AMOUNT	numeric(6,2),
 	H_DATA		varchar(24),
 
-	foreign key (H_C_W_ID, H_C_D_ID, H_C_ID) references CUSTOMER(C_W_ID, C_D_ID, C_ID),
-	foreign key (H_W_ID, H_D_ID) references DISTRICT(D_W_ID, D_ID)
+	foreign key (H_C_W_ID, H_C_D_ID, H_C_ID) references CUSTOMER(C_W_ID, C_D_ID, C_ID) ON DELETE CASCADE,
+	foreign key (H_W_ID, H_D_ID) references DISTRICT(D_W_ID, D_ID) ON DELETE CASCADE
 );
 
 /*
@@ -124,7 +122,7 @@ create table ORDERS (
 	O_ALL_LOCAL		numeric(1),
 
 	primary key (O_W_ID, O_D_ID,O_ID),
-	foreign key (O_W_ID, O_D_ID, O_C_ID) references CUSTOMER(C_W_ID, C_D_ID, C_ID)
+	foreign key (O_W_ID, O_D_ID, O_C_ID) references CUSTOMER(C_W_ID, C_D_ID, C_ID) ON DELETE CASCADE
 );
 
 /*
@@ -139,7 +137,7 @@ create table NEW_ORDER (
 	NO_W_ID		integer,
 
 	primary key (NO_W_ID, NO_D_ID, NO_O_ID),
-	foreign key (NO_W_ID, NO_D_ID, NO_O_ID) references ORDERS(O_W_ID, O_D_ID, O_ID)
+	foreign key (NO_W_ID, NO_D_ID, NO_O_ID) references ORDERS(O_W_ID, O_D_ID, O_ID) ON DELETE CASCADE
 );
 
 create table ITEM (
@@ -172,8 +170,8 @@ create table STOCK (
 	S_DATA			varchar(50),
 
 	primary key (S_W_ID, S_I_ID),
-	foreign key (S_W_ID) references WAREHOUSE(W_ID),
-	foreign key (S_I_ID) references ITEM(I_ID)
+	foreign key (S_W_ID) references WAREHOUSE(W_ID) ON DELETE CASCADE,
+	foreign key (S_I_ID) references ITEM(I_ID) ON DELETE CASCADE
 );
 
 /*
@@ -195,8 +193,8 @@ create table ORDER_LINE (
 	OL_DIST_INFO	char(24),
 
 	primary key (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER),
-	foreign key (OL_W_ID, OL_D_ID, OL_O_ID) references ORDERS(O_W_ID, O_D_ID, O_ID),
-	foreign key (OL_SUPPLY_W_ID, OL_I_ID) references STOCK(S_W_ID, S_I_ID)
+	foreign key (OL_W_ID, OL_D_ID, OL_O_ID) references ORDERS(O_W_ID, O_D_ID, O_ID) ON DELETE CASCADE,
+	foreign key (OL_SUPPLY_W_ID, OL_I_ID) references STOCK(S_W_ID, S_I_ID) ON DELETE CASCADE
 );
 
 
@@ -496,6 +494,142 @@ begin
 	select w_id from warehouses_inserted;
 
 	return;
+end;
+$$ language plpgsql;
+
+/*
+ * Clone a warehouse.
+ *
+ * NOTE: Data generated using this function is NOT compliant with the specification.
+ *
+ * The data generation using add_warehouses() is quite CPU intensive, and takes
+ * quite long. Using the clone method instead reduces the time to add a warehouse
+ * from 80+ seconds to 20+ seconds (on my laptop). The data generated using clone
+ * is safe for test purposes, but it cannot not be used for an *audited*
+ * benchmark run; use add_warehouses() function instead.
+ */
+create or replace function clone_warehouse(source_w_id integer, new_w_id integer) returns integer as $$
+begin
+	insert into warehouse
+		select	new_w_id,
+				W_NAME,
+				W_STREET_1,
+				W_STREET_2,
+				W_CITY,
+				W_STATE,
+				W_ZIP,
+				W_tAX,
+				W_YTD
+		from	WAREHOUSE
+		where	W_ID = source_w_id;
+
+	insert into DISTRICT
+		select	D_ID,
+				new_w_id,
+				D_NAME,
+				D_STREET_1,
+				D_STREET_2,
+				D_CITY,
+				D_STATE,
+				D_ZIP,
+				D_TAX,
+				D_YTD,
+				D_NEXT_O_ID
+		from	DISTRICT
+		where	D_W_ID = source_w_id;
+
+	insert into CUSTOMER
+		select	C_ID,
+				C_D_ID,
+				new_w_id,
+				C_FIRST,
+				C_MIDDLE,
+				C_LAST,
+				C_STREET_1,
+				C_STREET_2,
+				C_CITY,
+				C_STATE,
+				C_ZIP,
+				C_PHONE,
+				C_SINCE,
+				C_CREDIT,
+				C_CREDIT_LIM,
+				C_DISCOUNT,
+				C_BALANCE,
+				C_YTD_PAYMENT,
+				C_PAYMENT_CNT,
+				C_DELIVERY_CNT,
+				C_DATA
+		from	CUSTOMER
+		where	C_W_ID = source_w_id;
+
+	insert into HISTORY
+		select	H_C_ID,
+				H_C_D_ID,
+				new_w_id,
+				H_D_ID,
+				new_w_id,
+				H_DATE,
+				H_AMOUNT,
+				H_DATA
+		from	HISTORY
+		where	H_C_W_ID = source_w_id;
+
+	insert into ORDERS
+		select	O_ID,
+				O_D_ID,
+				new_w_id,
+				O_C_ID,
+				O_ENTRY_D,
+				O_CARRIER_ID,
+				O_OL_CNT,
+				O_ALL_LOCAL
+		from	ORDERS
+		where	O_W_ID = source_w_id;
+
+	insert into NEW_ORDER
+		select	NO_O_ID,
+				NO_D_ID,
+				new_w_id
+		from	NEW_ORDER
+		where	NO_W_ID = source_w_id;
+
+	insert into STOCK
+		select	S_I_ID,
+				new_w_id,
+				S_QUANTITY,
+				S_DIST_01,
+				S_DIST_02,
+				S_DIST_03,
+				S_DIST_04,
+				S_DIST_05,
+				S_DIST_06,
+				S_DIST_07,
+				S_DIST_08,
+				S_DIST_09,
+				S_DIST_10,
+				S_YTD,
+				S_ORDER_CNT,
+				S_REMOTE_CNT,
+				S_DATA
+		from	STOCK
+		where	S_W_ID = source_w_id;
+
+	insert into ORDER_LINE
+		select	OL_O_ID,
+				OL_D_ID,
+				new_w_id,
+				OL_NUMBER,
+				OL_I_ID,
+				OL_SUPPLY_W_ID,
+				OL_DELIVERY_D,
+				OL_QUANTITY,
+				OL_AMOUNT,
+				OL_DIST_INFO
+		from	ORDER_LINE
+		where	OL_W_ID = source_w_id;
+
+	return new_w_id;
 end;
 $$ language plpgsql;
 
@@ -1356,5 +1490,3 @@ begin
 	return;
 end;
 $$ language plpgsql;
-
-commit transaction;

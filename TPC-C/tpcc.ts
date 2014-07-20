@@ -29,8 +29,8 @@ var GPLv3Message =
 var blessed = require('blessed');
 var winston = require('winston');
 var g_logger = new (winston.Logger)({ exitOnError: false })
-g_logger.handleExceptions(new winston.transports.File({ filename: '/tmp/tpcc_exceptions.log' }))
-g_logger.add(winston.transports.File, { filename: '/tmp/tpcc.' + process.pid + '.log' });
+g_logger.handleExceptions(new winston.transports.File({ filename: '/tmp/tpcc_exceptions.log' }))    /* XXX This doesn't seem to do anything when an exception occurs! */
+g_logger.add(winston.transports.File, { filename: uvp_log_file });
 
 g_logger.log('info', 'Beginning TPC-C run.');
 
@@ -109,7 +109,7 @@ function increase_warehouse_count(count: number) {
 
     for (j = 0; j < 10; ++j) {
                                           /* Warehouse IDs are 1 based */
-      g_terminals[i*10 + j] = new Terminal(i+1, j+1, new Postgres(g_logger), (i === 0 && j === 0) ? mainBox : null, g_logger);
+      g_terminals[i*10 + j] = new Terminal(i+1, j+1, eval('new ' + uvp_database_type + '(g_logger)'), (i === 0 && j === 0) ? mainBox : null, g_logger);
     }
   }
 
@@ -120,7 +120,7 @@ function decrease_warehouse_count(count: number) {
     /* TODO */
 }
 
-increase_warehouse_count(1);
+increase_warehouse_count(uvp_active_warehouses);
 
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {
@@ -131,7 +131,7 @@ increase_warehouse_count(1);
     adminBox.setContent(stats.getStats());
 
     mainScreen.render();
-  }, 1 * 1000);
+  }, uvp_stats_interval * 1000);
 
   /*
    * For about first 18 seconds of the benchmark run, there are no 'New Order'
