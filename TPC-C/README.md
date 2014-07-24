@@ -37,9 +37,10 @@ Demo Screencast
 ---------------
 Click on the link labeled `slow` in the bottom-right corner of the screencast
 below to see a demo run of TPCC.js against `Postgres` using 15 warehouses (that
-is, 150 clients). The upper half of the screen shows Terminal-1 of Warehouse-1.
+is, 150 clients). The upper half of the screen shows Terminal-1 of Warehouse-1,
+and the bottom-half shows the statistics of all the transaction types.
 
-<iframe src="http://showterm.io/d269c80846350a4e9051b#8" width="684" height="790"></iframe>
+http://showterm.io/d269c80846350a4e9051b
 
 Notes
 =====
