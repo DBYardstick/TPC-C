@@ -1,32 +1,28 @@
 
-Open-source TPC benchmark implementations to a T, using less resources.
+Open-source database benchmark implementations, using less resources.
 
 Elevator Pitch
 ==============
 
-This project aims to implement the TPC benchmarks to a T, so much so that its
-results can pass a TPC auditor's scrutiny and can be published. TPC-C will be
-attempted first.
+This project aims to implement the database benchmarks to a T, so much so that
+the results obtained from these tests can pass an auditor's scrutiny and can be
+published as official results.
 
 Agreed that there's a lot more to a benchmark than the code to test the SUT
-(system under test), but the design, quality and implementation of the test
-driver code determines how many resources one has to spend on the client-side
-hardware to drive the tests.
+(system under test), but the architecture, design, quality and implementation of
+the test driver code determines how many resources one has to spend on the
+client-side hardware to run the benchmarks.
 
 If the client-side hardware requirements are reduced, the benchmark sponsor
-can spend more on the hardware for the System Under Test (SUT, or the
-database being tested).
-
-The first benchmark to be implemented is the famous TPC-C. I will target
-Postgres as the database SUT, since it's the one I am most comfortable with. But
-I will try to make it easier for addition of other databases.
+can spend more on the hardware for the System Under Test (SUT, a.k.a the
+'database' being tested).
 
 Mission Statement
 =================
 
-Develop an open-source implementations of TPC benchmarks that stick to the
-standard, allow for the variations permitted by the benchmark specification,
-and, most importantly, be very light on the hardware so that running a benchmark
+Develop open-source implementations of database benchmarks that stick to the
+specifications, allow for the variations permitted by the specification, and,
+most importantly, be very light on the hardware so that running a benchmark
 doesn't cost someone an arm and a leg.
 
 Strategic Planning
@@ -34,51 +30,27 @@ Strategic Planning
 
 See the "Decisions" section below.
 
-Motivation
-==========
+Project Status
+==============
 
-The TPC-C benchmark drivers currently available to us, like TPCC-UVa/DBT2/HammerDB,
-all run one process (or thread) at a time. Because the TPC-C benchmark specification
-limits the max tpmC (transactions per minute of benchmark-C) from any single
-client to be 1.2 tpmC, this means that to get a result of, say, 1 million tpmC
-one has to run with about 833,000 clients. Even for a decent number as low
-as 100,000 tpmC, one has to run 83,000 clients via processes/threads.
+The TPC-C benchmark has been implemented. It is currently capable of running
+100,000 clients against an infinitely fast database (implemented as `NullDB` in
+code), while consuming just one CPU.
 
-Given that running a process/thread, even on modern operating systems, is a bit
-expensive, it requires a big upfront investment to run the thousands of clients
-required for derving a decent tpmC number.
+The code is beta quality as of now (meaning, no known bugs but there's scope for
+enhancements).
 
-So, these existing implementations of TPC-C compromise on the one of the core
-requirements of the TPC-C benchmark: keying time and thinking time. These
-implementations resort to just hammering the SUT (system under test) with a
-constant stream of transactions from a few clients (ranging from 10-50). The
-database gets overwhelmed by the barrage of transactions coming from these few
-clients and at that point the tpmC recorded becomes the SUT's tpmC.
-
-So you can see that even though a decent modern database (running on a single
-machine) can serve a few hundred clients simultaneously, it ends up serving
-very few (10-50) clients. I strongly believe that this wasy the database is
-not being tested to its full capacity.
-
-2.7 million tpmC
------------------
-
-My iniital tests demonstrate that, theoretically, a NodeJS application running
-on my 2-year old laptop is capable of generating about 2.7 million tpmC; all
-this on a single CPU, while 7 other CPUs are sitting idle. I ran the
-nodejs_ticks_per_second.js script (linked below), to see how many events can
-NodeJS process per second. On my machine the result was about 600,000/sec. Since
-TPC-C mandates that no more than 45% of the transactions be the New Order
-Transaction, this means that only about 270,000 of those events can be used for
-processing New Order Transaction. Since a New Order transaction involves about
-6 steps (display menu, keying time, send transaction, receive result, render
-screen, think time), we can get 45,000 New Order Transactions per second, and
-that translates to 2,700,000 tpmC.
-
-https://github.com/gurjeet/nodejs_ticks_per_second/blob/master/ticks_per_second.js
+The architecture of this implementation allows one to easily port this benchmark
+application to another database, without any changes to the application itself.
+To test a new database system, implement a new interface to that database
+and develop the database specific transaction implementations; see `postgres_db.ts`
+for an example.
 
 Decisions
 =========
+
+The following decisions are driven by the need to implement a highly scalable
+implementation of TPC-C benchmark.
 
 I had been thinking of implementing this benchmark for a couple of years, and I
 was convinced that NodeJS' ability to allow easily and cheaply create
@@ -208,7 +180,7 @@ strings to the database and make it send the result as JSON as well. That would
 simplify the TPC-C application-side logic a bit because the application is being
 developed in JavaScript here.
 
-But I chose to not use JSON for database communication purely for performance
+  But I chose to not use JSON for database communication purely for performance
 reasons. Making the database do something that can be done by the client would
 make database performance suffer.
 
@@ -218,5 +190,20 @@ make database performance suffer.
 either. The serialization and deserialization of user-defined types consumes
 CPU which can be put to better use.
 
-TODO: The code currently in place violates both the above decisions, for lack
+  TODO: The code currently in place violates both the above decisions, for lack
 of time. Fix code to adhere to the above two decisions.
+
+9. Use `Repeatable Read` as the default transaction isolation level
+
+  This is to satisfy the requirements of the TPC-C specification, which requires
+that the `New Order`, `Payment`, `Delivery` and `Order Status` transactions
+should have `repeatable read` isolation from each other (see clause 3.4 of the
+specification for more details). Also, the 'Stock Level' transactions are subject
+to less stringent isolation: `read committed`.
+
+	A transaction operating with `repeatable read` isolation may encounter
+serialization errors. But since 'Order Status' and 'Stock Level' transactions are
+read-only transactions, they will never encounter these serialization errors in
+Postgres. So I don't bother changing transaction isolation to `read committed`
+before executing `Stock Level` transaction; not doing so reduces at least one
+network round-trip per `Stock Level` transaction.

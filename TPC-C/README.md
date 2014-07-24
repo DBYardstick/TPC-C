@@ -1,4 +1,64 @@
 
+Motivation
+==========
+
+The TPC-C benchmark drivers currently available to us, like TPCC-UVa, DBT2,
+HammerDB, BenchmarkSQL, etc., all run one process (or thread) per simulated
+client. Because the TPC-C benchmark specification limits the max tpmC metric
+(transactions per minute of benchmark-C) from any single client to be 1.286 tpmC,
+this means that to get a result of, say, 1 million tpmC we have to run about
+833,000 clients. Even for a decent number as low as 100,000 tpmC, one has to run
+83,000 clients.
+
+Given that running a process/thread, even on modern operating systems, is a bit
+expensive, it requires a big upfront investment in hardware to run the thousands
+of clients required for driving a decent tpmC number. For example, the current
+TPC-C record holder had to run 6.8 million clients to achieve 8.55 million tpmC,
+and they used 16 high-end servers to run these clients, which cost them about
+$ 220,000 (plus $ 550,000 in client-side software).
+
+So, to avoid those high costs, these existing open-source implementations of
+TPC-C compromise on the one of the core requirements of the TPC-C benchmark:
+keying and thinking times. These implementations resort to just hammering the
+SUT (system under test) with a constant barrage of transactions from a few
+clients (ranging from 10-50).
+
+So you can see that even though a decent modern database (running on a single
+machine) can serve a few hundred clients simultaneously, it ends up serving
+very few (10-50) clients. I strongly believe that this way the database is
+not being tested to its full capacity; at least not as the TPC-C specification
+intended.
+
+The web-servers of yesteryears also suffer from the same problem; using one
+process for each client request prohibits them from scaling, because the
+underlying operating system cannot run thousands of processes efficiently. The
+web-servers solved this problem (known as [c10k problem]) by using event-driven
+architecture which is capable of handling thousands of clients using a single
+process, and with minimal effort on the operating system's part.
+
+So this implementation of TPC-C uses a similar architecture and uses [NodeJS],
+the event-driven architecture, to run thousands of clients against a database.
+
+[c10k problem]: http://en.wikipedia.org/wiki/C10k_problem
+[NodeJS]: http://nodejs.org/
+
+2.7 million tpmC
+-----------------
+
+My iniital tests demonstrate that, theoretically, a NodeJS application running
+on my 2-year old laptop is capable of generating about 2.7 million tpmC; all
+this on a single CPU, while 7 other CPUs are sitting idle. I ran the
+nodejs_ticks_per_second.js script (linked below), to see how many events can
+NodeJS process per second. On my machine the result was about 600,000/sec. Since
+TPC-C mandates that no more than 45% of the transactions be the New Order
+Transaction, this means that only about 270,000 of those events can be used for
+processing New Order Transaction. Since a New Order transaction involves about
+6 steps (display menu, keying time, send transaction, receive result, render
+screen, think time), we can get 45,000 New Order Transactions per second, and
+that translates to 2,700,000 tpmC.
+
+https://github.com/gurjeet/nodejs_ticks_per_second/blob/master/ticks_per_second.js
+
 Developers
 ==========
 
