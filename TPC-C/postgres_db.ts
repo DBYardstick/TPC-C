@@ -69,15 +69,32 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS "New Order"' : 'select to_json(process_new_order($1::new_order_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_new_order];
 
-			client.query( {name: 'New Order', text: query, values: bind_values }, function(err: any, result: any) {
+			var serialization_error_count: number = 0;
+
+			var newOrderResponseHandler = function(err: any, result: any): void {
+
+				if (err) {
+					if (err.severity === "ERROR" && err.code === "40001") {
+
+						++serialization_error_count;
+
+						client.query( {name: 'New Order', text: query, values: bind_values }, newOrderResponseHandler);
+						return;
+
+					} else {
+						self.logger.log('error', JSON.stringify(err));
+						callback('Error: ' + JSON.stringify(err), input);
+						// Release the client back to the pool
+						done();
+						return;
+					}
+				}
 
 				// Release the client back to the pool
 				done();
 
-				if (err) {
-					self.logger.log('error', JSON.stringify(err));
-					callback('Error: ' + JSON.stringify(err), input);
-					return;
+				if (serialization_error_count > 0) {
+					self.logger.log('info', 'NewOrder succeeded after ' + serialization_error_count + ' serialization failures.');
 				}
 
 				if (self.dummy_mode) {
@@ -137,7 +154,10 @@ class Postgres implements TPCCDatabase {
 				input.total_amount  = output.total_amount;
 
 				callback('Success', input);
-			});
+			}
+
+			client.query( {name: 'New Order', text: query, values: bind_values }, newOrderResponseHandler);
+
 		});
 	}
 
@@ -166,15 +186,33 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS "Payment"' : 'select to_json(process_payment($1::payment_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_payment];
 
-			client.query( {name: 'Payment', text: query, values: bind_values }, function(err: any, result: any) {
+			var serialization_error_count: number = 0;
+
+			var paymentResponseHandler = function(err: any, result: any) {
+
+				if (err) {
+					if (err.severity === "ERROR" && err.code === "40001") {
+
+						++serialization_error_count;
+
+						client.query( {name: 'Payment', text: query, values: bind_values }, paymentResponseHandler);
+
+						return;
+
+					} else {
+						self.logger.log('error', JSON.stringify(err));
+						callback('Error: ' + JSON.stringify(err), input);
+						// Release the client back to the pool
+						done();
+						return;
+					}
+				}
 
 				// Release the client back to the pool
 				done();
 
-				if (err) {
-					self.logger.log('error', JSON.stringify(err));
-					callback('Error: ' + JSON.stringify(err), input);
-					return;
+			if (serialization_error_count > 0) {
+					self.logger.log('info', 'Payment succeeded after ' + serialization_error_count + ' serialization failures.');
 				}
 
 				if (self.dummy_mode) {
@@ -215,7 +253,9 @@ class Postgres implements TPCCDatabase {
 				input.h_date			= new Date(Date.parse(output.h_date));
 
 				callback('Success', input);
-			});
+			};
+
+			client.query( {name: 'Payment', text: query, values: bind_values }, paymentResponseHandler);
 		});
 	}
 
@@ -246,16 +286,31 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS "Delivery"' : 'select to_json(process_delivery($1::delivery_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_delivery];
 
-			client.query( {name: 'Delivery', text: query, values: bind_values }, function(err: any, result: any) {
+			var serialization_error_count = 0;
+
+			var deliveryResponseHandler = function (err: any, result: any) {
+
+				if (err) {
+						if (err.severity === "ERROR" && err.code === "40001") {
+						++serialization_error_count;
+
+						client.query({ name: 'Delivery', text: query, values: bind_values }, deliveryResponseHandler);
+						return;
+					} else {
+						self.logger.log('error', JSON.stringify(err));
+						callback('Error: ' + JSON.stringify(err), input);
+
+						// Release the client back to the pool
+						done();
+						return;
+					}
+				}
 
 				// Release the client back to the pool
 				done();
 
-				if (err) {
-					/* TODO: In case of 'Serialization' error, retry the transaction. */
-					self.logger.log('error', JSON.stringify(err));
-					callback('Error: ' + JSON.stringify(err), input);
-					return;
+				if (serialization_error_count > 0) {
+					self.logger.log('info', 'Delivery succeeded after ' + serialization_error_count + ' serialization failures.');
 				}
 
 				if (self.dummy_mode) {
@@ -268,7 +323,9 @@ class Postgres implements TPCCDatabase {
 				input.delivered_orders = output.delivered_orders;
 
 				callback('Success', input);
-			});
+			};
+
+			client.query({ name: 'Delivery', text: query, values: bind_values }, deliveryResponseHandler);
 		});
 	}
 
@@ -294,16 +351,32 @@ class Postgres implements TPCCDatabase {
 			var query				= self.dummy_mode ? 'SELECT $1::int AS "Order Status"' : 'select to_json(process_order_status($1::order_status_param)) as output';
 			var bind_values = self.dummy_mode ? ['1'] : [serialized_order_status];
 
-			client.query( {name: 'Order Status', text: query, values: bind_values }, function(err: any, result: any) {
+			var serialization_error_count: number = 0;
+
+			var orderStatusResponseHandler = function(err: any, result: any): void {
+
+				if (err) {
+					if (err.severity === "ERROR" && err.code === "40001") {
+
+						++serialization_error_count;
+
+						client.query( {name: 'Order Status', text: query, values: bind_values }, orderStatusResponseHandler);
+						return;
+
+					} else {
+						self.logger.log('error', JSON.stringify(err));
+						callback('Error: ' + JSON.stringify(err), input);
+						// Release the client back to the pool
+						done();
+						return;
+					}
+				}
 
 				// Release the client back to the pool
 				done();
 
-				if (err) {
-					/* TODO: In case of 'Serialization' error, retry the transaction. */
-					self.logger.log('error', JSON.stringify(err));
-					callback('Error: ' + JSON.stringify(err), input);
-					return;
+				if (serialization_error_count > 0) {
+					self.logger.log('info', 'OrderStatus succeeded after ' + serialization_error_count + ' serialization failures.');
 				}
 
 				if (self.dummy_mode) {
@@ -338,7 +411,9 @@ class Postgres implements TPCCDatabase {
 				}
 
 				callback('Success', input);
-			});
+			};
+
+			client.query( {name: 'Order Status', text: query, values: bind_values }, orderStatusResponseHandler);
 		});
 	}
 
