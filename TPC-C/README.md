@@ -144,6 +144,32 @@ Typical output may look like:
 (5 rows)
 ```
 
+* To clone many warehouses from a given warehouse, say from w_id:0, generate
+the SQL and execute it in parallel, like so:
+
+```bash
+for (( i = 320; i <= 7000; ++i)); do
+	echo psql -U postgres -c \''set search_path = tpcc; select clone_warehouse(0, s) from generate_series('$i, $i') as s;'\' ;
+done > /tmp/load.sh
+
+cat /tmp/load.sh | parallel.sh 10
+```
+
+* If needed, vacuum analyze the tables manually:
+
+```sql
+vacuum analyze warehouse;
+vacuum analyze district;
+vacuum analyze customer;
+vacuum analyze orders;
+vacuum analyze new_order;
+vacuum analyze stock;
+vacuum analyze order_line;
+
+/* DO NOT VACUUM ANALYZE HISTORY; it's never read back. */
+/* DO NOT VACUUM ANALYZE ITEM after the initial vacuum analyze.*/
+```
+
 TODO
 ====
 

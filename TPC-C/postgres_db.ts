@@ -1,6 +1,6 @@
 /// <reference path="../typings/pg/pg.d.ts" />
 
-var pg = require('pg');
+var pg = require('pg.js');
 
 class Postgres implements TPCCDatabase {
 
