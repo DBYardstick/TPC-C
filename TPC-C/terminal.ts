@@ -67,12 +67,23 @@ class TPCCStats {
   }
 
   reset_globals() {
+    var t = this;
+
     xact_counts['New Order']    = 0;
     xact_counts['Payment']      = 0;
     xact_counts['Order Status'] = 0;
     xact_counts['Delivery']     = 0;
     xact_counts['Stock Level']  = 0;
-    this.stats_calc_time_last      = new Date();
+
+    t.xact_counts_last                 = {};
+    t.xact_counts_last['New Order']    = 0;
+    t.xact_counts_last['Payment']      = 0;
+    t.xact_counts_last['Order Status'] = 0;
+    t.xact_counts_last['Delivery']     = 0;
+    t.xact_counts_last['Stock Level']  = 0;
+    t.test_start_time                  = new Date();
+    t.stats_calc_time_last             = t.test_start_time;
+    t.total_xacts_last                 = 0;
   }
 
   getStats() {
