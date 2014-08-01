@@ -128,6 +128,10 @@ mainScreen.key(['C-r'], function(ch: any, key: any) {
   stats.reset_globals();
 });
 
+mainScreen.key(['C-u'], function(ch: any, key: any) {
+  increase_warehouse_count(1);
+});
+
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {
 

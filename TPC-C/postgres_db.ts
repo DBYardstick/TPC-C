@@ -4,7 +4,7 @@ var pg = require('pg.js');
 
 var getExponentialBackoff = function(numFailed: number, responseTime: number): number {
 	/* Exponential backoff, in case of a serialization error. */
-	var sleepTime: number = 50 * Math.random() * (Math.pow(2, numFailed) - 1);
+	var sleepTime: number = 200 * Math.random() * (Math.pow(2, numFailed) - 1);
 
 	/* Clamp sleep time to be less than half the transaction response time constraint. */
 	sleepTime = Math.max(sleepTime, responseTime / 2);

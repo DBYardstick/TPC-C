@@ -337,7 +337,7 @@ var pg = require('pg.js');
 
 var getExponentialBackoff = function (numFailed, responseTime) {
     /* Exponential backoff, in case of a serialization error. */
-    var sleepTime = 50 * Math.random() * (Math.pow(2, numFailed) - 1);
+    var sleepTime = 200 * Math.random() * (Math.pow(2, numFailed) - 1);
 
     /* Clamp sleep time to be less than half the transaction response time constraint. */
     sleepTime = Math.max(sleepTime, responseTime / 2);
@@ -1719,6 +1719,10 @@ mainScreen.key(['C-c'], function (ch, key) {
 
 mainScreen.key(['C-r'], function (ch, key) {
     stats.reset_globals();
+});
+
+mainScreen.key(['C-u'], function (ch, key) {
+    increase_warehouse_count(1);
 });
 
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
