@@ -1696,7 +1696,7 @@ mainScreen.key(['C-c'], function (ch, key) {
     return process.exit(0);
 });
 
-mainScreen.key(['r'], function (ch, key) {
+mainScreen.key(['C-r'], function (ch, key) {
     stats.reset_globals();
 });
 

@@ -124,7 +124,7 @@ mainScreen.key(['C-c'], function(ch: any, key: any) {
   return process.exit(0);
 });
 
-mainScreen.key(['r'], function(ch: any, key: any) {
+mainScreen.key(['C-r'], function(ch: any, key: any) {
   stats.reset_globals();
 });
 
