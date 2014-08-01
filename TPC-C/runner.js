@@ -613,7 +613,7 @@ var Postgres = (function () {
                 done();
 
                 if (serialization_error_count > 0) {
-                    self.logger.log('info', 'NewOrder succeeded after ' + serialization_error_count + ' serialization failures.');
+                    self.logger.log('info', 'Delivery succeeded after ' + serialization_error_count + ' serialization failures.');
                 }
 
                 if (self.dummy_mode) {
@@ -729,7 +729,7 @@ var Postgres = (function () {
                 done();
 
                 if (err) {
-                    self.logger.log('error', 'StockLevel error: ' + JSON.stringify(err));
+                    self.logger.log('error', JSON.stringify(err));
                     callback('Error: ' + JSON.stringify(err), input);
                     return;
                 }
@@ -1654,11 +1654,6 @@ var adminBox = blessed.box({
     }
 });
 
-/* End the program on these keys */
-mainScreen.key(['q', 'C-c'], function (ch, key) {
-    return process.exit(0);
-});
-
 mainBox.focus();
 
 mainScreen.render();
@@ -1683,10 +1678,19 @@ function decrease_warehouse_count(count) {
 
 increase_warehouse_count(uvp_active_warehouses);
 
+var stats = new TPCCStats();
+
+/* End the program on these keys */
+mainScreen.key(['C-c'], function (ch, key) {
+    return process.exit(0);
+});
+
+mainScreen.key(['r'], function (ch, key) {
+    stats.reset_globals();
+});
+
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {
-    var stats = new TPCCStats();
-
     setInterval(function () {
         adminBox.setContent(stats.getStats());
 

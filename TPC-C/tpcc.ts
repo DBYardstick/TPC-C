@@ -90,11 +90,6 @@ var adminBox: any = blessed.box({
 });
 
 
-/* End the program on these keys */
-mainScreen.key(['q', 'C-c'], function(ch: any, key: any) {
-  return process.exit(0);
-});
-
 mainBox.focus();
 
 mainScreen.render();
@@ -122,9 +117,19 @@ function decrease_warehouse_count(count: number) {
 
 increase_warehouse_count(uvp_active_warehouses);
 
+var stats: TPCCStats = new TPCCStats();
+
+/* End the program on these keys */
+mainScreen.key(['C-c'], function(ch: any, key: any) {
+  return process.exit(0);
+});
+
+mainScreen.key(['r'], function(ch: any, key: any) {
+  stats.reset_globals();
+});
+
 /* IIFE to display transaction stats, and to prevent polluting global scope. */
 (function () {
-  var stats: TPCCStats = new TPCCStats();
 
   setInterval(function(){
 
