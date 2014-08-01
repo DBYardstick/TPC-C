@@ -2,6 +2,17 @@
 
 var pg = require('pg.js');
 
+var getExponentialBackoff = function(numFailed: number, responseTime: number): number {
+	/* Exponential backoff, in case of a serialization error. */
+	var sleepTime: number = 50 * Math.random() * (Math.pow(2, numFailed) - 1);
+
+	/* Clamp sleep time to be less than half the transaction response time constraint. */
+	sleepTime = Math.max(sleepTime, responseTime / 2);
+
+	return sleepTime;
+}
+
+
 class Postgres implements TPCCDatabase {
 
 
@@ -78,7 +89,10 @@ class Postgres implements TPCCDatabase {
 
 						++serialization_error_count;
 
-						client.query( {name: 'New Order', text: query, values: bind_values }, newOrderResponseHandler);
+						setTimeout(function(){
+							client.query( {name: 'New Order', text: query, values: bind_values }, newOrderResponseHandler);
+						}, getExponentialBackoff(serialization_error_count, 2500));
+
 						return;
 
 					} else {
@@ -195,7 +209,9 @@ class Postgres implements TPCCDatabase {
 
 						++serialization_error_count;
 
-						client.query( {name: 'Payment', text: query, values: bind_values }, paymentResponseHandler);
+						setTimeout(function(){
+							client.query( {name: 'Payment', text: query, values: bind_values }, paymentResponseHandler);
+						}, getExponentialBackoff(serialization_error_count, 2500));
 
 						return;
 
@@ -294,7 +310,10 @@ class Postgres implements TPCCDatabase {
 						if (err.severity === "ERROR" && err.code === "40001") {
 						++serialization_error_count;
 
-						client.query({ name: 'Delivery', text: query, values: bind_values }, deliveryResponseHandler);
+						setTimeout(function() {
+							client.query({ name: 'Delivery', text: query, values: bind_values }, deliveryResponseHandler);
+						}, getExponentialBackoff(serialization_error_count, 2500));
+
 						return;
 					} else {
 						self.logger.log('error', JSON.stringify(err));
@@ -360,7 +379,10 @@ class Postgres implements TPCCDatabase {
 
 						++serialization_error_count;
 
-						client.query( {name: 'Order Status', text: query, values: bind_values }, orderStatusResponseHandler);
+						setTimeout(function() {
+							client.query( {name: 'Order Status', text: query, values: bind_values }, orderStatusResponseHandler);
+						}, getExponentialBackoff(serialization_error_count, 2500));
+
 						return;
 
 					} else {
