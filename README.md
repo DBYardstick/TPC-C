@@ -67,7 +67,7 @@ norm is to create an application that simulates an order-entry terminal, and
 run multiple instances of it from multiple computers. With a maximum tpmC at
 1.2 per terminal ([Max tpmC Slide]) (because of the percentages of New Order
 transactions and keying/think times), one computer simply cannot host enough
-processes for the tests to deliver decent tpmC. For eg. with the default maximum
+processes for the tests to deliver decent tpmC. For example, with the default maximum
 process limit of around 65,000 in Linux, we would get 78,000 tpmC, given that the
 OS doesn't actually come to a grinding halt by the time it creates 65k processes.
 
@@ -180,7 +180,7 @@ strings to the database and make it send the result as JSON as well. That would
 simplify the TPC-C application-side logic a bit because the application is being
 developed in JavaScript here.
 
-  But I chose to not use JSON for database communication purely for performance
+	But I chose to not use JSON for database communication purely for performance
 reasons. Making the database do something that can be done by the client would
 make database performance suffer.
 
@@ -190,15 +190,15 @@ make database performance suffer.
 either. The serialization and deserialization of user-defined types consumes
 CPU which can be put to better use.
 
-  TODO: The code currently in place violates both the above decisions, for lack
+	TODO: The code currently in place violates both the above decisions, for lack
 of time. Fix code to adhere to the above two decisions.
 
 9. Use `Repeatable Read` as the default transaction isolation level
 
-  This is to satisfy the requirements of the TPC-C specification, which requires
+	This is to satisfy the requirements of the TPC-C specification, which requires
 that the `New Order`, `Payment`, `Delivery` and `Order Status` transactions
 should have `repeatable read` isolation from each other (see clause 3.4 of the
-specification for more details). Also, the 'Stock Level' transactions are subject
+specification for more details). Also, the `Stock Level` transactions are subject
 to less stringent isolation: `read committed`.
 
 	A transaction operating with `repeatable read` isolation may encounter
