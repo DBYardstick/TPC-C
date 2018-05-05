@@ -1,5 +1,4 @@
-
-Open-source database benchmark implementations, using less resources.
+Specification-compliant database benchmark implementations.
 
 Elevator Pitch
 ==============
@@ -14,13 +13,12 @@ the test driver code determines how many resources one has to spend on the
 client-side hardware to run the benchmarks.
 
 If the client-side hardware requirements are reduced, the benchmark sponsor
-can spend more on the hardware for the System Under Test (SUT, a.k.a the
-'database' being tested).
+can spend more on the hardware for the SUT(a.k.a the 'database' being tested).
 
 Mission Statement
 =================
 
-Develop open-source implementations of database benchmarks that stick to the
+Develop implementations of database benchmarks that stick to the
 specifications, allow for the variations permitted by the specification, and,
 most importantly, be very light on the hardware so that running a benchmark
 doesn't cost someone an arm and a leg.
